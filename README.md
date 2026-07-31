@@ -16,6 +16,14 @@ Early proof of concept. Working today:
 - Per-key approval policy: per-destination standings plus block-forwarded, approve-local, approve-all, and lock, editable at any time.
 - Start at login via the system login items mechanism, with no separate daemon.
 
+## Install
+
+```
+brew install pszypowicz/tap/sequester
+```
+
+Or download the notarized `Sequester.dmg` from the [latest release](https://github.com/pszypowicz/sequester/releases/latest) and drag Sequester into Applications. Requires macOS 26 or later.
+
 ## Keys
 
 A key is created with four settings:
