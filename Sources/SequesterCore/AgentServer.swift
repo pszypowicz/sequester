@@ -64,7 +64,7 @@ public final class AgentServer: @unchecked Sendable {
             throw AgentServerError.socketFailed("bind: \(Self.errnoString())")
         }
         chmod(socketPath, 0o600)
-        guard listen(fd, 16) == 0 else {
+        guard listen(fd, 128) == 0 else {
             close(fd)
             throw AgentServerError.socketFailed("listen: \(Self.errnoString())")
         }
