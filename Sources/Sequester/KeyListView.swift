@@ -11,6 +11,7 @@ struct KeyListView: View {
     @Environment(KeyStore.self) private var store
     @State private var selection: SidebarItem? = .general
     @State private var showCreate = false
+    @State private var editCandidate: KeyMetadata?
     @State private var deleteCandidate: String?
 
     var body: some View {
@@ -38,6 +39,10 @@ struct KeyListView: View {
                         .padding(.vertical, 2)
                         .tag(SidebarItem.key(key.name))
                         .contextMenu {
+                            Button("Edit…") {
+                                editCandidate = key
+                            }
+                            Divider()
                             Button("Delete \"\(key.name)\"…", role: .destructive) {
                                 deleteCandidate = key.name
                             }
@@ -62,7 +67,7 @@ struct KeyListView: View {
         } detail: {
             if case .key(let name) = selection,
                let key = store.keys.first(where: { $0.name == name }) {
-                KeyDetailView(key: key, selection: $selection)
+                KeyDetailView(key: key)
                     .id(key.name)
             } else {
                 SetupView()
@@ -70,6 +75,13 @@ struct KeyListView: View {
         }
         .sheet(isPresented: $showCreate) {
             CreateKeySheet()
+        }
+        .sheet(item: $editCandidate) { key in
+            EditKeySheet(key: key) { newName in
+                if selection == .key(key.name) {
+                    selection = .key(newName)
+                }
+            }
         }
         .confirmationDialog(
             "Delete \"\(deleteCandidate ?? "")\"?",
