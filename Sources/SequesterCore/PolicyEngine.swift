@@ -38,6 +38,10 @@ public enum PolicyEngine {
         if branchRules.contains(where: { $0.state == .approved }) {
             return .allow
         }
+        // Approve-all signs anything not blocked above, forwarded included.
+        if key.approveAll {
+            return .allow
+        }
         // A locked key learns nothing new: only pre-approved paths sign,
         // everything else is denied without asking.
         if key.locked {

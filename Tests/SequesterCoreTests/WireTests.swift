@@ -313,6 +313,24 @@ import CryptoKit
         #expect(PolicyEngine.evaluate(key: key, chain: [vm2, github]) == .allow)
     }
 
+    @Test func approveAllSignsUnblockedIncludingForwarded() {
+        var key = makeKey()
+        key.approveAll = true
+        #expect(PolicyEngine.evaluate(key: key, chain: [github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, chain: [vm1, github]) == .allow)
+        // Blocks still win over approve-all.
+        var blockedFwd = key
+        blockedFwd.blockForwarded = true
+        #expect(PolicyEngine.evaluate(key: blockedFwd, chain: [vm1, github]) == .deny)
+        var blockedDest = makeKey(destinations: [record([github], .blocked)])
+        blockedDest.approveAll = true
+        #expect(PolicyEngine.evaluate(key: blockedDest, chain: [github]) == .deny)
+        // Approve-all overrides lock.
+        var lockedToo = key
+        lockedToo.locked = true
+        #expect(PolicyEngine.evaluate(key: lockedToo, chain: [github]) == .allow)
+    }
+
     @Test func lockedDeniesUnapprovedButKeepsStandings() {
         let approved = makeKey(destinations: [record([github], .approved)])
         var lockedApproved = approved

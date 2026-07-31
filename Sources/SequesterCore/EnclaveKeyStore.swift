@@ -122,6 +122,15 @@ public enum EnclaveKeyStore {
     }
 
     @discardableResult
+    public static func setApproveAll(name: String, enabled: Bool) throws -> KeyMetadata {
+        var metadata = try KeyStorage.load(name: name).metadata
+        metadata.approveAll = enabled
+        try KeyStorage.updateMetadata(metadata)
+        Log.store.log("Set approveAll of \(name, privacy: .public) to \(enabled, privacy: .public)")
+        return metadata
+    }
+
+    @discardableResult
     public static func setAutoApprove(name: String, enabled: Bool) throws -> KeyMetadata {
         var metadata = try KeyStorage.load(name: name).metadata
         metadata.autoApprove = enabled

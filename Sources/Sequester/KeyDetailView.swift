@@ -25,20 +25,26 @@ struct KeyDetailView: View {
 
             Section("Approval") {
                 LabeledContent("Touch ID", value: key.authRequired ? "Required for every signature" : "Not required")
-                Toggle(isOn: blockForwardedBinding) {
-                    settingLabel("Block forwarded requests",
-                                 "Denies every request that arrives through a forwarded agent connection, regardless of the destination's standing.")
-                }
                 if !key.authRequired {
+                    Toggle(isOn: approveAllBinding) {
+                        settingLabel("Approve all requests without asking",
+                                     "Signs every request with no dialog, forwarded or not, except destinations you have blocked. The broadest setting; it overrides approve-local and lock.")
+                    }
                     Toggle(isOn: autoApproveBinding) {
                         settingLabel("Approve local requests without asking",
                                      "Signs local (non-forwarded) requests with no dialog or naming prompt. Forwarded requests still ask, and blocks always win.")
                     }
+                    .disabled(key.approveAll)
+                }
+                Toggle(isOn: blockForwardedBinding) {
+                    settingLabel("Block forwarded requests",
+                                 "Denies every request that arrives through a forwarded agent connection, regardless of the destination's standing.")
                 }
                 Toggle(isOn: lockedBinding) {
                     settingLabel("Lock to current destinations",
                                  "Signs only for destinations you have already approved; everything else is denied without asking. Turn off to allow new destinations again.")
                 }
+                .disabled(key.approveAll)
             }
 
             Section("Public key") {
@@ -113,6 +119,20 @@ struct KeyDetailView: View {
             set: { locked in
                 do {
                     try store.setLocked(name: key.name, locked: locked)
+                    errorMessage = nil
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        )
+    }
+
+    private var approveAllBinding: Binding<Bool> {
+        Binding(
+            get: { key.approveAll },
+            set: { enabled in
+                do {
+                    try store.setApproveAll(name: key.name, enabled: enabled)
                     errorMessage = nil
                 } catch {
                     errorMessage = error.localizedDescription

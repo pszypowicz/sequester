@@ -89,9 +89,13 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     /// Denies every request arriving through a forwarded agent connection,
     /// regardless of per-destination standing.
     public var blockForwarded: Bool
-    /// Signs without asking for anything that is not explicitly blocked.
-    /// Only meaningful for keys without the Touch ID requirement, whose
-    /// Enclave prompt cannot be skipped.
+    /// Signs every request without asking, forwarded or not, except what is
+    /// explicitly blocked. Only meaningful for keys without the Touch ID
+    /// requirement.
+    public var approveAll: Bool
+    /// Signs local (non-forwarded) requests without asking. Only meaningful
+    /// for keys without the Touch ID requirement, whose Enclave prompt
+    /// cannot be skipped.
     public var autoApprove: Bool
     /// Finalizes the key to its current standings: nothing new is learned
     /// or asked, so any destination that is not already approved is denied.
@@ -108,13 +112,15 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     public var id: String { name }
 
     public init(name: String, keyDescription: String, authRequired: Bool,
-                blockForwarded: Bool = false, autoApprove: Bool = false, locked: Bool = false,
+                blockForwarded: Bool = false, approveAll: Bool = false,
+                autoApprove: Bool = false, locked: Bool = false,
                 destinations: [DestinationRecord] = [],
                 branchRules: [BranchRule] = [], publicKey: Data, createdAt: Date) {
         self.name = name
         self.keyDescription = keyDescription
         self.authRequired = authRequired
         self.blockForwarded = blockForwarded
+        self.approveAll = approveAll
         self.autoApprove = autoApprove
         self.locked = locked
         self.destinations = destinations
@@ -124,7 +130,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, keyDescription, authRequired, blockForwarded, autoApprove, locked
+        case name, keyDescription, authRequired, blockForwarded, approveAll, autoApprove, locked
         case destinations, branchRules, publicKey, createdAt
     }
 
@@ -134,6 +140,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         keyDescription = try container.decode(String.self, forKey: .keyDescription)
         authRequired = try container.decode(Bool.self, forKey: .authRequired)
         blockForwarded = try container.decodeIfPresent(Bool.self, forKey: .blockForwarded) ?? false
+        approveAll = try container.decodeIfPresent(Bool.self, forKey: .approveAll) ?? false
         autoApprove = try container.decodeIfPresent(Bool.self, forKey: .autoApprove) ?? false
         locked = try container.decodeIfPresent(Bool.self, forKey: .locked) ?? false
         destinations = try container.decodeIfPresent([DestinationRecord].self, forKey: .destinations) ?? []
