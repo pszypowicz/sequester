@@ -152,7 +152,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     }
 
     public var publicKeyLine: String {
-        OpenSSH.publicKeyLine(x963: publicKey, comment: name)
+        OpenSSH.publicKeyLine(x963: publicKey, comment: "\(name)@sequester")
     }
 }
 
