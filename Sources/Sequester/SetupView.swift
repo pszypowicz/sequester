@@ -33,7 +33,7 @@ struct SetupView: View {
                             .foregroundStyle(.red)
                     }
                 }
-                CopyRow(label: "Socket path", value: SequesterPaths.socketURL.path)
+                CopyRow(icon: "link", label: "Socket path", value: SequesterPaths.socketURL.path)
             }
 
             Section("App") {

@@ -27,10 +27,10 @@ struct KeyDetailView: View {
             }
 
             Section("Public key") {
-                CopyRow(label: "Public key path", value: key.publicKeyFileURL.path, revealURL: key.publicKeyFileURL)
-                CopyRow(label: "Public key", value: key.publicKeyLine)
-                CopyRow(label: "SHA256 fingerprint", value: key.fingerprint)
-                CopyRow(label: "MD5 fingerprint", value: key.fingerprintMD5)
+                CopyRow(icon: "doc.text", label: "Public key path", value: key.publicKeyFileURL.path, revealURL: key.publicKeyFileURL)
+                CopyRow(icon: "key", label: "Public key", value: key.publicKeyLine)
+                CopyRow(icon: "number", label: "SHA256 fingerprint", value: key.fingerprint)
+                CopyRow(icon: "number", label: "MD5 fingerprint", value: key.fingerprintMD5)
             }
 
             if let errorMessage {
