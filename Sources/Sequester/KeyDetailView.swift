@@ -65,7 +65,7 @@ struct KeyDetailView: View {
                             row: row,
                             allowApprove: !key.authRequired,
                             label: { hostNames.label(for: $0) },
-                            branchState: { hops in key.branchRules.first { $0.id == DestinationRecord.chainID(hops) }?.state ?? .neutral },
+                            branchState: rowState,
                             isCollapsed: { collapsed.contains($0) },
                             onToggle: { id in
                                 if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
@@ -76,6 +76,7 @@ struct KeyDetailView: View {
                             onDeleteBranch: { hops in store.removeDestinationsUnder(name: key.name, prefix: hops) },
                             onName: { namingTarget = NamingTarget(id: $0) }
                         )
+                        .listRowBackground(rowTint(for: row))
                     }
                 }
             } header: {
@@ -119,6 +120,24 @@ struct KeyDetailView: View {
         )
     }
 
+    private func rowState(_ hops: [ChainHop]) -> DestinationState {
+        key.branchRules.first { $0.id == DestinationRecord.chainID(hops) }?.state ?? .neutral
+    }
+
+    /// Full-row tint for a standing. Applied on the ForEach element so the
+    /// grouped Form colors the whole row edge to edge.
+    private func rowTint(for row: DestinationRow) -> Color? {
+        let state: DestinationState = switch row.kind {
+        case .route(let node): rowState(node.hops)
+        case .destination(let record): record.state
+        }
+        return switch state {
+        case .approved: Color.green.opacity(0.22)
+        case .blocked: Color.red.opacity(0.22)
+        case .neutral: nil
+        }
+    }
+
     private var blockForwardedBinding: Binding<Bool> {
         Binding(
             get: { key.blockForwarded },
@@ -131,6 +150,39 @@ struct KeyDetailView: View {
                 }
             }
         )
+    }
+}
+
+/// An info dot that reveals text in a popover after a brief hover, matching
+/// the interaction used elsewhere in these apps' settings.
+private struct InfoDot: View {
+
+    let text: String
+    @State private var shown = false
+    @State private var hoverDelay: Task<Void, Never>?
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .onHover { inside in
+                hoverDelay?.cancel()
+                if inside {
+                    hoverDelay = Task {
+                        try? await Task.sleep(nanoseconds: 150_000_000)
+                        guard !Task.isCancelled else { return }
+                        shown = true
+                    }
+                } else {
+                    shown = false
+                }
+            }
+            .popover(isPresented: $shown) {
+                Text(text)
+                    .font(.system(.callout, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(12)
+            }
     }
 }
 
@@ -181,7 +233,6 @@ private struct DestinationRowView: View {
             controls
         }
         .padding(.vertical, 2)
-        .listRowBackground(background)
     }
 
     // MARK: leading
@@ -225,10 +276,7 @@ private struct DestinationRowView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             if named {
-                Image(systemName: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .help(fingerprint)
+                InfoDot(text: fingerprint)
             }
             NameButton(isNamed: named) { onName(fingerprint) }
         }
@@ -276,14 +324,6 @@ private struct DestinationRowView: View {
         switch row.kind {
         case .route(let node): branchState(node.hops)
         case .destination(let record): record.state
-        }
-    }
-
-    private var background: Color? {
-        switch currentState {
-        case .blocked: Color.red.opacity(0.14)
-        case .approved: Color.green.opacity(0.14)
-        case .neutral: nil
         }
     }
 
