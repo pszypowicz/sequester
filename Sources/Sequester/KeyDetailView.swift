@@ -29,8 +29,8 @@ struct KeyDetailView: View {
             Section("Public key") {
                 CopyRow(icon: "doc.text", label: "Public key path", value: key.publicKeyFileURL.path, revealURL: key.publicKeyFileURL)
                 CopyRow(icon: "key", label: "Public key", value: key.publicKeyLine)
-                CopyRow(icon: "number", label: "SHA256 fingerprint", value: key.fingerprint)
-                CopyRow(icon: "number", label: "MD5 fingerprint", value: key.fingerprintMD5)
+                CopyRow(icon: "touchid", label: "SHA256 fingerprint", value: key.fingerprint)
+                CopyRow(icon: "touchid", label: "MD5 fingerprint", value: key.fingerprintMD5)
             }
 
             if let errorMessage {
