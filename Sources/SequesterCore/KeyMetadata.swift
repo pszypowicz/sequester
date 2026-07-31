@@ -30,8 +30,6 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     /// the key's access control at creation and unchangeable afterwards.
     public let authRequired: Bool
     public var policy: SigningPolicy
-    /// Reserved for the pinned-destinations policy; unused for now.
-    public var pinnedHosts: [String]
     /// The public key (x9.63 uncompressed point), cached at creation so
     /// listing never has to load Enclave key handles.
     public let publicKey: Data
@@ -40,13 +38,11 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     public var id: String { name }
 
     public init(name: String, keyDescription: String, authRequired: Bool,
-                policy: SigningPolicy, pinnedHosts: [String] = [],
-                publicKey: Data, createdAt: Date) {
+                policy: SigningPolicy, publicKey: Data, createdAt: Date) {
         self.name = name
         self.keyDescription = keyDescription
         self.authRequired = authRequired
         self.policy = policy
-        self.pinnedHosts = pinnedHosts
         self.publicKey = publicKey
         self.createdAt = createdAt
     }

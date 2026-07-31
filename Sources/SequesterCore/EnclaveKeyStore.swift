@@ -153,7 +153,7 @@ public enum EnclaveKeyStore {
         Log.store.debug("Wrote \(url.path, privacy: .public)")
     }
 
-    /// Reconciles ~/.sequester with the keychain: every key gets its
+    /// Reconciles the key directory with the keychain: every key gets its
     /// current .pub file (content includes the comment, which follows the
     /// name), and .pub files with no matching key are removed. The
     /// directory is app-managed, so stray .pub files are treated as stale,
