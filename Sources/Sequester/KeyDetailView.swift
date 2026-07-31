@@ -11,6 +11,7 @@ struct KeyDetailView: View {
     let key: KeyMetadata
     @State private var errorMessage: String?
     @State private var namingTarget: NamingTarget?
+    @State private var collapsed: Set<String> = []
 
     var body: some View {
         Form {
@@ -59,12 +60,16 @@ struct KeyDetailView: View {
                     }
                     .padding(.vertical, 2)
                 } else {
-                    ForEach(DestinationTree.build(key.destinations)) { node in
-                        DestinationNodeView(
-                            node: node,
+                    ForEach(DestinationTree.build(key.destinations).rows(collapsed: collapsed)) { row in
+                        DestinationRowView(
+                            row: row,
                             allowApprove: !key.authRequired,
                             label: { hostNames.label(for: $0) },
-                            branchState: { id in key.branchRules.first { $0.id == id }?.state ?? .neutral },
+                            branchState: { hops in key.branchRules.first { $0.id == DestinationRecord.chainID(hops) }?.state ?? .neutral },
+                            isCollapsed: { collapsed.contains($0) },
+                            onToggle: { id in
+                                if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
+                            },
                             onRecordState: { id, state in store.setDestinationState(name: key.name, id: id, state: state) },
                             onBranchState: { hops, state in store.setBranchRule(name: key.name, hops: hops, state: state) },
                             onDelete: { id in store.removeDestination(name: key.name, id: id) },
@@ -76,7 +81,7 @@ struct KeyDetailView: View {
             } header: {
                 Text("Destinations")
             } footer: {
-                Text("A standing on a hop covers every path through it. A block anywhere on the path wins; otherwise the most specific standing applies. Right-click a host to name it.")
+                Text("Forwarding hops branch; the last hop is the destination reached. A standing on a hop covers every path through it. A block anywhere on the path wins; otherwise the most specific standing applies.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -145,139 +150,82 @@ private struct NameButton: View {
     }
 }
 
-/// One tree node: a bare record row for leaves, a disclosure branch for
-/// hops, with a merged host's direct-use record as the branch's first row.
-private struct DestinationNodeView: View {
+/// One line of the flattened destination tree. Every row - route hop or
+/// destination - uses the identical trailing control cluster pinned to the
+/// right by a Spacer, so the columns line up exactly regardless of depth or
+/// row kind. Indentation and a fixed-width disclosure slot keep the leading
+/// icons aligned too.
+private struct DestinationRowView: View {
 
-    let node: DestinationTree.Node
+    private static let indentWidth: CGFloat = 16
+    private static let slotWidth: CGFloat = 18
+
+    let row: DestinationRow
     let allowApprove: Bool
     let label: (String) -> String
-    let branchState: (String) -> DestinationState
+    let branchState: ([ChainHop]) -> DestinationState
+    let isCollapsed: (String) -> Bool
+    let onToggle: (String) -> Void
     let onRecordState: (String, DestinationState) -> Void
     let onBranchState: ([ChainHop], DestinationState) -> Void
     let onDelete: (String) -> Void
     let onDeleteBranch: ([ChainHop]) -> Void
     let onName: (String) -> Void
 
-    @State private var expanded = true
-
     var body: some View {
-        if node.children.isEmpty, let record = node.record {
-            DestinationRecordRow(
-                record: record,
-                allowApprove: allowApprove,
-                label: label,
-                onState: { onRecordState(record.id, $0) },
-                onDelete: { onDelete(record.id) },
-                onName: onName
-            )
-        } else {
-            DisclosureGroup(isExpanded: $expanded) {
-                if let record = node.record {
-                    DestinationRecordRow(
-                        record: record,
-                        allowApprove: allowApprove,
-                        label: label,
-                        onState: { onRecordState(record.id, $0) },
-                        onDelete: { onDelete(record.id) },
-                        onName: onName
-                    )
-                }
-                ForEach(node.children) { child in
-                    DestinationNodeView(
-                        node: child,
-                        allowApprove: allowApprove,
-                        label: label,
-                        branchState: branchState,
-                        onRecordState: onRecordState,
-                        onBranchState: onBranchState,
-                        onDelete: onDelete,
-                        onDeleteBranch: onDeleteBranch,
-                        onName: onName
-                    )
-                }
-            } label: {
-                branchLabel
-            }
+        HStack(spacing: 6) {
+            Color.clear.frame(width: CGFloat(row.depth) * Self.indentWidth, height: 0)
+            disclosure
+            content
+            Spacer(minLength: 8)
+            controls
         }
+        .padding(.vertical, 2)
+        .listRowBackground(background)
     }
 
-    private var branchLabel: some View {
-        let state = branchState(DestinationRecord.chainID(node.hops))
-        let name = label(node.fingerprint)
-        return HStack(spacing: 6) {
-            Image(systemName: "arrow.triangle.branch")
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name)
-                    .font(name == node.fingerprint ? .system(.caption, design: .monospaced) : .body)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if name != node.fingerprint {
-                    Text(node.fingerprint)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-            NameButton(isNamed: name != node.fingerprint) { onName(node.fingerprint) }
-            Spacer()
-            if allowApprove {
-                branchButton(state, .approved, icon: "checkmark.shield", tint: .green,
-                             help: "Sign without asking for everything through this hop")
-            }
-            branchButton(state, .neutral, icon: "questionmark.circle", tint: .secondary,
-                         help: "No branch standing")
-            branchButton(state, .blocked, icon: "xmark.shield", tint: .red,
-                         help: "Deny everything through this hop")
+    // MARK: leading
+
+    @ViewBuilder private var disclosure: some View {
+        switch row.kind {
+        case .route(let node):
             Button {
-                onDeleteBranch(node.hops)
+                onToggle(node.id)
             } label: {
-                Image(systemName: "trash")
+                Image(systemName: isCollapsed(node.id) ? "chevron.right" : "chevron.down")
+                    .foregroundStyle(.secondary)
+                    .frame(width: Self.slotWidth)
             }
             .buttonStyle(.borderless)
-            .help("Forget all destinations through this hop")
+        case .destination:
+            Color.clear.frame(width: Self.slotWidth, height: 0)
         }
     }
 
-    private func branchButton(_ current: DestinationState, _ state: DestinationState,
-                              icon: String, tint: Color, help: String) -> some View {
-        Button {
-            onBranchState(node.hops, state)
-        } label: {
-            Image(systemName: current == state ? "\(icon).fill" : icon)
-                .foregroundStyle(current == state ? tint : Color.secondary)
+    @ViewBuilder private var content: some View {
+        switch row.kind {
+        case .route(let node):
+            hostLabel(fingerprint: node.fingerprint, icon: "arrow.triangle.branch", trailing: nil)
+        case .destination(let record):
+            let fingerprint = record.destination?.fingerprint ?? "unknown"
+            hostLabel(fingerprint: fingerprint, icon: "mappin.and.ellipse",
+                      trailing: record.isForwarded ? "FORWARDED" : nil, subtitle: usage(record))
         }
-        .buttonStyle(.borderless)
-        .help(help)
     }
-}
 
-/// One observed signing path: destination, route, usage stats, and the
-/// standing controls (approve only where the app dialog is the gate).
-private struct DestinationRecordRow: View {
-
-    let record: DestinationRecord
-    let allowApprove: Bool
-    let label: (String) -> String
-    let onState: (DestinationState) -> Void
-    let onDelete: () -> Void
-    let onName: (String) -> Void
-
-    var body: some View {
-        let fingerprint = record.destination?.fingerprint ?? "unknown"
+    private func hostLabel(fingerprint: String, icon: String, trailing: String?, subtitle: String? = nil) -> some View {
         let name = label(fingerprint)
-        return HStack(alignment: .center, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        return HStack(spacing: 6) {
+            Image(systemName: icon).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
                     Text(name)
                         .font(name == fingerprint ? .system(.caption, design: .monospaced) : .body)
                         .textSelection(.enabled)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    if record.isForwarded {
-                        Text("FORWARDED")
+                    if let trailing {
+                        Text(trailing)
                             .font(.caption2.bold())
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -291,51 +239,84 @@ private struct DestinationRecordRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                Text(usageDescription)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if let subtitle {
+                    Text(subtitle).font(.caption2).foregroundStyle(.secondary)
+                }
             }
             NameButton(isNamed: name != fingerprint) { onName(fingerprint) }
-            Spacer()
-            if allowApprove {
-                stateButton(.approved, icon: "checkmark.shield", tint: .green, help: "Sign without asking")
-            }
-            stateButton(.neutral, icon: "questionmark.circle", tint: .secondary, help: "Ask before signing")
-            stateButton(.blocked, icon: "xmark.shield", tint: .red, help: "Deny without asking")
-            Button {
-                onDelete()
-            } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.borderless)
-            .help("Forget this destination")
         }
-        .padding(.vertical, 2)
-        .listRowBackground(rowBackground)
     }
 
-    private var rowBackground: Color? {
-        switch record.state {
+    // MARK: trailing
+
+    @ViewBuilder private var controls: some View {
+        let state = currentState
+        if allowApprove {
+            stateButton(state, .approved, icon: "checkmark.shield", tint: .green, help: approveHelp)
+        }
+        stateButton(state, .neutral, icon: "questionmark.circle", tint: .secondary, help: neutralHelp)
+        stateButton(state, .blocked, icon: "xmark.shield", tint: .red, help: blockHelp)
+        Button {
+            switch row.kind {
+            case .route(let node): onDeleteBranch(node.hops)
+            case .destination(let record): onDelete(record.id)
+            }
+        } label: {
+            Image(systemName: "trash")
+        }
+        .buttonStyle(.borderless)
+        .help(row.isRoute ? "Forget all destinations through this hop" : "Forget this destination")
+    }
+
+    private func stateButton(_ current: DestinationState, _ state: DestinationState,
+                             icon: String, tint: Color, help: String) -> some View {
+        Button {
+            switch row.kind {
+            case .route(let node): onBranchState(node.hops, state)
+            case .destination(let record): onRecordState(record.id, state)
+            }
+        } label: {
+            Image(systemName: current == state ? "\(icon).fill" : icon)
+                .foregroundStyle(current == state ? tint : Color.secondary)
+        }
+        .buttonStyle(.borderless)
+        .help(help)
+    }
+
+    // MARK: helpers
+
+    private var currentState: DestinationState {
+        switch row.kind {
+        case .route(let node): branchState(node.hops)
+        case .destination(let record): record.state
+        }
+    }
+
+    private var background: Color? {
+        switch currentState {
         case .blocked: Color.red.opacity(0.14)
         case .approved: Color.green.opacity(0.14)
         case .neutral: nil
         }
     }
 
-    private var usageDescription: String {
-        let route = record.isForwarded ? "forwarded" : "local"
+    private func usage(_ record: DestinationRecord) -> String {
         let uses = record.count == 1 ? "1 use" : "\(record.count) uses"
-        return "\(route) · \(uses) · last \(record.lastUsed.formatted(.relative(presentation: .named)))"
+        return "\(uses) · last \(record.lastUsed.formatted(.relative(presentation: .named)))"
     }
 
-    private func stateButton(_ state: DestinationState, icon: String, tint: Color, help: String) -> some View {
-        Button {
-            onState(state)
-        } label: {
-            Image(systemName: record.state == state ? "\(icon).fill" : icon)
-                .foregroundStyle(record.state == state ? tint : Color.secondary)
-        }
-        .buttonStyle(.borderless)
-        .help(help)
+    private var approveHelp: String {
+        row.isRoute ? "Sign without asking for everything through this hop" : "Sign without asking"
+    }
+    private var neutralHelp: String { row.isRoute ? "No branch standing" : "Ask before signing" }
+    private var blockHelp: String {
+        row.isRoute ? "Deny everything through this hop" : "Deny without asking"
+    }
+}
+
+private extension DestinationRow {
+    var isRoute: Bool {
+        if case .route = kind { return true }
+        return false
     }
 }
