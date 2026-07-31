@@ -121,6 +121,15 @@ public enum EnclaveKeyStore {
         return metadata
     }
 
+    @discardableResult
+    public static func setAutoApprove(name: String, enabled: Bool) throws -> KeyMetadata {
+        var metadata = try KeyStorage.load(name: name).metadata
+        metadata.autoApprove = enabled
+        try KeyStorage.updateMetadata(metadata)
+        Log.store.log("Set autoApprove of \(name, privacy: .public) to \(enabled, privacy: .public)")
+        return metadata
+    }
+
     /// Updates the usage log for an observed chain: bumps counters for a
     /// known path, adds a neutral record for a new one. Best effort; the
     /// signing flow must not fail on bookkeeping.

@@ -41,6 +41,11 @@ final class KeyStore {
         reload()
     }
 
+    func setAutoApprove(name: String, enabled: Bool) throws {
+        try EnclaveKeyStore.setAutoApprove(name: name, enabled: enabled)
+        reload()
+    }
+
     func setDestinationState(name: String, id: String, state: DestinationState) {
         EnclaveKeyStore.setDestinationState(name: name, id: id, state: state)
         reload()

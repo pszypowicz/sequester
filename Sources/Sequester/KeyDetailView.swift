@@ -25,6 +25,9 @@ struct KeyDetailView: View {
             Section {
                 LabeledContent("Touch ID", value: key.authRequired ? "Required for every signature" : "Not required")
                 Toggle("Block forwarded requests", isOn: blockForwardedBinding)
+                if !key.authRequired {
+                    Toggle("Approve everything by default", isOn: autoApproveBinding)
+                }
             } header: {
                 Text("Approval")
             } footer: {
@@ -89,9 +92,25 @@ struct KeyDetailView: View {
     private var approvalCaption: String {
         if key.authRequired {
             "Touch ID is enforced by the Secure Enclave and cannot be bypassed or replaced by Sequester. Blocked destinations and blocked forwarded requests are denied before any prompt appears."
+        } else if key.autoApprove {
+            "This key signs for anything that is not blocked, with no dialog and no naming prompt. Blocked destinations and blocked forwarded requests are still denied."
         } else {
             "Sequester asks before each signature unless the destination is approved. Blocked destinations and blocked forwarded requests are denied without asking."
         }
+    }
+
+    private var autoApproveBinding: Binding<Bool> {
+        Binding(
+            get: { key.autoApprove },
+            set: { enabled in
+                do {
+                    try store.setAutoApprove(name: key.name, enabled: enabled)
+                    errorMessage = nil
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        )
     }
 
     private var blockForwardedBinding: Binding<Bool> {
@@ -106,6 +125,22 @@ struct KeyDetailView: View {
                 }
             }
         )
+    }
+}
+
+/// Sits next to every fingerprint so naming and renaming a host is always
+/// one visible click away.
+private struct NameButton: View {
+
+    let isNamed: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isNamed ? "pencil" : "tag")
+        }
+        .buttonStyle(.borderless)
+        .help(isNamed ? "Rename this host" : "Name this host")
     }
 }
 
@@ -183,9 +218,7 @@ private struct DestinationNodeView: View {
                         .truncationMode(.middle)
                 }
             }
-            .contextMenu {
-                Button("Name This Host…") { onName(node.fingerprint) }
-            }
+            NameButton(isNamed: name != node.fingerprint) { onName(node.fingerprint) }
             Spacer()
             if allowApprove {
                 branchButton(state, .approved, icon: "checkmark.shield", tint: .green,
@@ -252,9 +285,7 @@ private struct DestinationRecordRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            .contextMenu {
-                Button("Name This Host…") { onName(fingerprint) }
-            }
+            NameButton(isNamed: name != fingerprint) { onName(fingerprint) }
             Spacer()
             if allowApprove {
                 stateButton(.approved, icon: "checkmark.shield", tint: .green, help: "Sign without asking")
