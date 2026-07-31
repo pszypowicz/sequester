@@ -101,12 +101,6 @@ import Foundation
                                       appStanding: .allowed, trust: .applePlatform) == .allow)
     }
 
-    @Test func defaultsPreserveLegacyBehavior() {
-        // Called without the app arguments, the engine behaves as before.
-        #expect(PolicyEngine.evaluate(key: key(approved: true), bindingChain: [local]) == .allow)
-        #expect(PolicyEngine.evaluate(key: key(), bindingChain: [local]) == .ask)
-    }
-
     @Test func lockedKeyDeniesNewDestinationRegardlessOfApp() {
         var locked = key()
         locked.locked = true

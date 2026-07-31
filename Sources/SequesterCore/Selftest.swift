@@ -93,7 +93,8 @@ public enum Selftest {
             )
             metadata = try KeyStorage.load(name: temporaryKeyName).metadata
             guard metadata.destinations[0].state == .approved,
-                  PolicyEngine.evaluate(key: metadata, bindingChain: [hop]) == .allow else {
+                  PolicyEngine.evaluate(key: metadata, bindingChain: [hop],
+                                        appStanding: .allowed, trust: .applePlatform) == .allow else {
                 throw KeychainError.corruptItem
             }
             EnclaveKeyStore.removeDestination(name: temporaryKeyName, id: DestinationRecord.bindingChainID([hop]))

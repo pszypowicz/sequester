@@ -13,7 +13,7 @@ final class KeyStore {
 
     var enclaveAvailable: Bool { EnclaveKeyStore.isEnclaveAvailable }
 
-    private var observer: (any NSObjectProtocol)?
+    @ObservationIgnored nonisolated(unsafe) private var observer: (any NSObjectProtocol)?
 
     init() {
         reload()
@@ -23,6 +23,12 @@ final class KeyStore {
             forName: .sequesterKeysDidChange, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.reload() }
+        }
+    }
+
+    deinit {
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
         }
     }
 

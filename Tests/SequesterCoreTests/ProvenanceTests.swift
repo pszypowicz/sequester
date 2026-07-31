@@ -85,6 +85,13 @@ import Foundation
         #expect(p.displayName == "Foo (Team ABCDE12345)")
     }
 
+    @Test func bundlePathDropsDotAppSuffix() {
+        // SecCodeCopyPath returns the .app bundle path for a GUI app.
+        let p = Provenance(pid: 1, path: "/Applications/Foo.app", trust: .developerID,
+                           signingIdentifier: "com.example.Foo", teamID: "ABCDE12345")
+        #expect(p.displayName == "Foo (Team ABCDE12345)")
+    }
+
     @Test func unverifiedLabelIsQuotedAndFlagged() {
         let p = Provenance(pid: 1, path: "/tmp/evil/ssh")
         #expect(p.displayName == "\"ssh\" (unverified)")

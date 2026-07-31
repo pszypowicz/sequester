@@ -25,8 +25,8 @@ public enum SigningDecision: Equatable, Sendable {
 public enum PolicyEngine {
 
     public static func evaluate(key: KeyMetadata, bindingChain: [BindingHop],
-                                appStanding: AppStanding = .allowed,
-                                trust: Provenance.Trust = .applePlatform) -> SigningDecision {
+                                appStanding: AppStanding,
+                                trust: Provenance.Trust) -> SigningDecision {
         // A blocked app is refused outright, like a destination block.
         if appStanding == .blocked {
             return .deny

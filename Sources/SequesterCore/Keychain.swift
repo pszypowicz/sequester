@@ -182,6 +182,9 @@ public enum AppAuthorizationStore {
 
     private static let mutationLock = NSLock()
 
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var cache: [AppAuthorization]?
+
     private static func baseQuery() -> [CFString: Any] {
         [
             kSecClass: kSecClassGenericPassword,
@@ -190,14 +193,18 @@ public enum AppAuthorizationStore {
         ]
     }
 
+    /// Cached because it is read on the signing hot path (once per request
+    /// for a verified app with no per-key rule). This store is the only
+    /// writer, so setState and remove keep the cache current.
     public static func list() -> [AppAuthorization] {
-        var query = baseQuery()
-        query[kSecMatchLimit] = kSecMatchLimitOne
-        query[kSecReturnData] = true
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data else { return [] }
-        return (try? JSONDecoder().decode([AppAuthorization].self, from: data)) ?? []
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if let cache {
+            return cache
+        }
+        let loaded = load()
+        cache = loaded
+        return loaded
     }
 
     public static func state(for identity: String) -> AppState? {
@@ -221,6 +228,7 @@ public enum AppAuthorizationStore {
             ))
         }
         save(items)
+        replaceCache(items)
         postChange()
     }
 
@@ -232,6 +240,7 @@ public enum AppAuthorizationStore {
         items.removeAll { $0.identity == identity }
         guard items.count != before else { return }
         save(items)
+        replaceCache(items)
         postChange()
     }
 
@@ -255,6 +264,12 @@ public enum AppAuthorizationStore {
             attributes[kSecAttrLabel] = "Sequester: app authorizations"
             SecItemAdd(attributes as CFDictionary, nil)
         }
+    }
+
+    private static func replaceCache(_ items: [AppAuthorization]) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        cache = items
     }
 
     private static func postChange() {

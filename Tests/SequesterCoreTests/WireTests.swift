@@ -204,38 +204,38 @@ import CryptoKit
     }
 
     @Test func unknownChainAsks() {
-        #expect(PolicyEngine.evaluate(key: makeKey(), bindingChain: [local]) == .ask)
+        #expect(PolicyEngine.evaluate(key: makeKey(), bindingChain: [local], appStanding: .allowed, trust: .applePlatform) == .ask)
     }
 
     @Test func emptyChainAsks() {
-        #expect(PolicyEngine.evaluate(key: makeKey(), bindingChain: []) == .ask)
+        #expect(PolicyEngine.evaluate(key: makeKey(), bindingChain: [], appStanding: .allowed, trust: .applePlatform) == .ask)
     }
 
     @Test func blockForwardedDeniesForwardedOnly() {
         let key = makeKey(blockForwarded: true)
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [hop, local]) == .deny)
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [local]) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [hop, local], appStanding: .allowed, trust: .applePlatform) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [local], appStanding: .allowed, trust: .applePlatform) == .ask)
     }
 
     @Test func blockForwardedBeatsApprovedRecord() {
         let bindingChain = [hop, local]
         let key = makeKey(blockForwarded: true, destinations: [record(bindingChain, .approved)])
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: bindingChain) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: bindingChain, appStanding: .allowed, trust: .applePlatform) == .deny)
     }
 
     @Test func recordStatesApply() {
-        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .approved)]), bindingChain: [local]) == .allow)
-        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .blocked)]), bindingChain: [local]) == .deny)
-        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .neutral)]), bindingChain: [local]) == .ask)
+        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .approved)]), bindingChain: [local], appStanding: .allowed, trust: .applePlatform) == .allow)
+        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .blocked)]), bindingChain: [local], appStanding: .allowed, trust: .applePlatform) == .deny)
+        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .neutral)]), bindingChain: [local], appStanding: .allowed, trust: .applePlatform) == .ask)
     }
 
     @Test func chainIdentityIncludesRoute() {
         let viaVM1 = [hop, local]
         let key = makeKey(destinations: [record(viaVM1, .approved)])
         let viaVM2 = [BindingHop(fingerprint: "SHA256:vm2", algorithm: "ssh-ed25519", forwarding: true), local]
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: viaVM1) == .allow)
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: viaVM2) == .ask)
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [local]) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: viaVM1, appStanding: .allowed, trust: .applePlatform) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: viaVM2, appStanding: .allowed, trust: .applePlatform) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [local], appStanding: .allowed, trust: .applePlatform) == .ask)
     }
 }
 
@@ -264,9 +264,9 @@ import CryptoKit
 
     @Test func branchRuleCoversEveryPathThroughIt() {
         let key = makeKey(rules: [BranchRule(hops: [vm1], state: .blocked)])
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github]) == .deny)
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1]) == .deny)
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm2, github]) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github], appStanding: .allowed, trust: .applePlatform) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1], appStanding: .allowed, trust: .applePlatform) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm2, github], appStanding: .allowed, trust: .applePlatform) == .ask)
     }
 
     /// The user's case: block github through vm1, approve it through vm2.
@@ -275,8 +275,8 @@ import CryptoKit
             BranchRule(hops: [vm1], state: .blocked),
             BranchRule(hops: [vm2], state: .approved),
         ])
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github]) == .deny)
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm2, github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github], appStanding: .allowed, trust: .applePlatform) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm2, github], appStanding: .allowed, trust: .applePlatform) == .allow)
     }
 
     @Test func blockAnywhereOnPathWins() {
@@ -284,13 +284,13 @@ import CryptoKit
             destinations: [record([vm1, github], .approved)],
             rules: [BranchRule(hops: [vm1], state: .blocked)]
         )
-        #expect(PolicyEngine.evaluate(key: blockedBranch, bindingChain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedBranch, bindingChain: [vm1, github], appStanding: .allowed, trust: .applePlatform) == .deny)
 
         let blockedLeaf = makeKey(
             destinations: [record([vm1, github], .blocked)],
             rules: [BranchRule(hops: [vm1], state: .approved)]
         )
-        #expect(PolicyEngine.evaluate(key: blockedLeaf, bindingChain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedLeaf, bindingChain: [vm1, github], appStanding: .allowed, trust: .applePlatform) == .deny)
     }
 
     @Test func exactRecordBeatsApprovedBranchOnlyWhenBlocking() {
@@ -298,25 +298,25 @@ import CryptoKit
             destinations: [record([vm2, github], .neutral)],
             rules: [BranchRule(hops: [vm2], state: .approved)]
         )
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm2, github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm2, github], appStanding: .allowed, trust: .applePlatform) == .allow)
     }
 
     @Test func approveAllSignsUnblockedIncludingForwarded() {
         var key = makeKey()
         key.approveAll = true
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [github]) == .allow)
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github], appStanding: .allowed, trust: .applePlatform) == .allow)
         // Blocks still win over approve-all.
         var blockedFwd = key
         blockedFwd.blockForwarded = true
-        #expect(PolicyEngine.evaluate(key: blockedFwd, bindingChain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedFwd, bindingChain: [vm1, github], appStanding: .allowed, trust: .applePlatform) == .deny)
         var blockedDest = makeKey(destinations: [record([github], .blocked)])
         blockedDest.approveAll = true
-        #expect(PolicyEngine.evaluate(key: blockedDest, bindingChain: [github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedDest, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .deny)
         // Approve-all overrides lock.
         var lockedToo = key
         lockedToo.locked = true
-        #expect(PolicyEngine.evaluate(key: lockedToo, bindingChain: [github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: lockedToo, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .allow)
     }
 
     @Test func lockedDeniesUnapprovedButKeepsStandings() {
@@ -324,39 +324,39 @@ import CryptoKit
         var lockedApproved = approved
         lockedApproved.locked = true
         // Approved paths still sign, unknown paths deny instead of ask.
-        #expect(PolicyEngine.evaluate(key: lockedApproved, bindingChain: [github]) == .allow)
-        #expect(PolicyEngine.evaluate(key: lockedApproved, bindingChain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: lockedApproved, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .allow)
+        #expect(PolicyEngine.evaluate(key: lockedApproved, bindingChain: [vm1, github], appStanding: .allowed, trust: .applePlatform) == .deny)
 
         // Locking overrides auto-approve too: nothing new, even local.
         var lockedAuto = makeKey(autoApprove: true)
         lockedAuto.locked = true
-        #expect(PolicyEngine.evaluate(key: lockedAuto, bindingChain: [github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: lockedAuto, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .deny)
 
         // A blocked path stays blocked (deny), unaffected by lock.
         var lockedBlocked = makeKey(destinations: [record([github], .blocked)])
         lockedBlocked.locked = true
-        #expect(PolicyEngine.evaluate(key: lockedBlocked, bindingChain: [github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: lockedBlocked, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .deny)
     }
 
     @Test func autoApproveIsLocalOnly() {
         let key = makeKey(autoApprove: true)
         // Local (no forwarding) signs silently.
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .allow)
         // Forwarded still asks, and an unbound request still asks.
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github]) == .ask)
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: []) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github], appStanding: .allowed, trust: .applePlatform) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [], appStanding: .allowed, trust: .applePlatform) == .ask)
     }
 
     @Test func autoApproveYieldsToBlocks() {
         let blockedLeaf = makeKey(destinations: [record([github], .blocked)], autoApprove: true)
-        #expect(PolicyEngine.evaluate(key: blockedLeaf, bindingChain: [github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedLeaf, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .deny)
 
         let blockedBranch = makeKey(rules: [BranchRule(hops: [github], state: .blocked)], autoApprove: true)
-        #expect(PolicyEngine.evaluate(key: blockedBranch, bindingChain: [github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedBranch, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .deny)
 
         let noForwarding = makeKey(autoApprove: true, blockForwarded: true)
-        #expect(PolicyEngine.evaluate(key: noForwarding, bindingChain: [vm1, github]) == .deny)
-        #expect(PolicyEngine.evaluate(key: noForwarding, bindingChain: [github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: noForwarding, bindingChain: [vm1, github], appStanding: .allowed, trust: .applePlatform) == .deny)
+        #expect(PolicyEngine.evaluate(key: noForwarding, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .allow)
     }
 
     @Test func deepChainsAreDistinctPaths() {
@@ -365,12 +365,12 @@ import CryptoKit
         let hopC = BindingHop(fingerprint: "SHA256:c", algorithm: "ssh-ed25519", forwarding: true)
         let deep = [hopA, hopB, hopC, github]
         let key = makeKey(destinations: [record(deep, .approved)])
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: deep) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: deep, appStanding: .allowed, trust: .applePlatform) == .allow)
         // Same destination, one hop shorter, is a different path.
-        #expect(PolicyEngine.evaluate(key: key, bindingChain: [hopA, hopB, github]) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [hopA, hopB, github], appStanding: .allowed, trust: .applePlatform) == .ask)
         // A block on the first hop covers the whole depth below it.
         let blocked = makeKey(destinations: [record(deep, .approved)], rules: [BranchRule(hops: [hopA], state: .blocked)])
-        #expect(PolicyEngine.evaluate(key: blocked, bindingChain: deep) == .deny)
+        #expect(PolicyEngine.evaluate(key: blocked, bindingChain: deep, appStanding: .allowed, trust: .applePlatform) == .deny)
     }
 }
 

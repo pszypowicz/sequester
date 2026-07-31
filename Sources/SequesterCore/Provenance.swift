@@ -71,7 +71,14 @@ public struct Provenance: Sendable, Hashable {
 
     static func sanitizedBasename(path: String?, pid: pid_t) -> String {
         guard let path else { return "pid \(pid)" }
-        let cleaned = sanitize(URL(filePath: path).lastPathComponent)
+        // For a verified GUI app SecCodeCopyPath returns the bundle path, so
+        // the last component keeps the ".app" suffix; drop it so the label
+        // reads as the app's name.
+        var component = URL(filePath: path).lastPathComponent
+        if component.hasSuffix(".app") {
+            component = String(component.dropLast(4))
+        }
+        let cleaned = sanitize(component)
         return cleaned.isEmpty ? "pid \(pid)" : cleaned
     }
 
