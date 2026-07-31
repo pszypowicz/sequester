@@ -11,17 +11,28 @@ public enum SigningDecision: Equatable, Sendable {
     case deny
 }
 
-/// Pure decision logic over a key's settings and the binding chain of the
-/// requesting connection.
+/// Pure decision logic over a key's settings, the requesting app's standing,
+/// and the binding chain of the requesting connection.
 ///
-/// Precedence: a block anywhere on the path (the exact chain, a branch rule,
-/// or block-forwarded) wins; otherwise any approval (the exact chain, a
-/// branch rule, or approve-all) allows; otherwise a locked key denies, an
-/// unlocked key auto-approves local (non-forwarded) use if configured, and
-/// everything else asks. Block-wins is the safe default for a security tool.
+/// Precedence: a blocked app, or a block anywhere on the path (the exact
+/// chain, a branch rule, or block-forwarded), wins and denies. Otherwise an
+/// app that has never been authorized is asked (so the user can authorize or
+/// block it). Otherwise the destination axis decides as before - an approval
+/// (exact chain, branch rule, or approve-all) allows, a locked key denies, an
+/// unlocked key auto-approves local use if configured, everything else asks -
+/// except that an unverified requester is never signed for silently.
+/// Block-wins is the safe default for a security tool.
 public enum PolicyEngine {
 
-    public static func evaluate(key: KeyMetadata, bindingChain: [BindingHop]) -> SigningDecision {
+    public static func evaluate(key: KeyMetadata, bindingChain: [BindingHop],
+                                appStanding: AppStanding = .allowed,
+                                trust: Provenance.Trust = .applePlatform) -> SigningDecision {
+        // A blocked app is refused outright, like a destination block.
+        if appStanding == .blocked {
+            return .deny
+        }
+
+        // Destination-axis blocks still win over any approval.
         if key.blockForwarded && bindingChain.contains(where: { $0.forwarding }) {
             return .deny
         }
@@ -33,6 +44,28 @@ public enum PolicyEngine {
         if branchRules.contains(where: { $0.state == .blocked }) {
             return .deny
         }
+
+        // The app must be authorized before anything signs. An app that has
+        // never been seen is asked, so the user can authorize or block it -
+        // even for a Touch ID key, whose Enclave prompt cannot capture that
+        // choice.
+        if appStanding == .unknown {
+            return .ask
+        }
+
+        let destination = destinationDecision(key: key, bindingChain: bindingChain,
+                                              record: record, branchRules: branchRules)
+        // A silent signature requires a verified requester; an unverified peer
+        // that would otherwise sign silently is downgraded to asking.
+        if trust == .unverified && destination == .allow {
+            return .ask
+        }
+        return destination
+    }
+
+    private static func destinationDecision(key: KeyMetadata, bindingChain: [BindingHop],
+                                            record: DestinationRecord?,
+                                            branchRules: [BranchRule]) -> SigningDecision {
         if record?.state == .approved {
             return .allow
         }

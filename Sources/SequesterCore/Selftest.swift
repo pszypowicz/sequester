@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import Darwin
 
 /// Headless diagnostics behind hidden launch flags, so the signed app can
 /// verify its keychain entitlement and Enclave access from a terminal
@@ -148,5 +149,56 @@ public enum Selftest {
             print("FAIL delete \(name): \(error.localizedDescription)")
             return 1
         }
+    }
+
+    /// Answers the M0 question: can this build resolve a peer's code
+    /// signature? Binds a throwaway socket, waits for one connection, and
+    /// prints the full resolution report (including the raw status of the
+    /// sandbox-gated SecCode call) for whatever process connects. Drive it
+    /// from `/usr/bin/ssh` (expect Apple), a copied/unsigned binary (expect
+    /// unverified), and the signed app itself (expect Developer ID).
+    public static func provenanceProbe() -> Int32 {
+        let path = NSTemporaryDirectory() + "sequester-provenance-\(getpid()).sock"
+        unlink(path)
+
+        let listenFD = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard listenFD >= 0 else { print("FAIL socket: \(errnoText())"); return 1 }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = Array(path.utf8)
+        guard pathBytes.count < MemoryLayout.size(ofValue: addr.sun_path) else {
+            print("FAIL: socket path too long"); close(listenFD); return 1
+        }
+        withUnsafeMutableBytes(of: &addr.sun_path) { $0.copyBytes(from: pathBytes) }
+
+        let size = socklen_t(MemoryLayout<sockaddr_un>.size)
+        let bindRC = withUnsafePointer(to: &addr) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(listenFD, $0, size) }
+        }
+        guard bindRC == 0 else { print("FAIL bind: \(errnoText())"); close(listenFD); return 1 }
+        guard listen(listenFD, 1) == 0 else { print("FAIL listen: \(errnoText())"); close(listenFD); return 1 }
+
+        print("provenance probe listening at \(path)")
+        print("connect a client to that socket path (any process), e.g. a client pointed at it")
+        // accept() blocks, and stdout is fully buffered when not a tty, so the
+        // listening line must be flushed before waiting or a driver never sees
+        // the path to connect to.
+        fflush(stdout)
+        let clientFD = accept(listenFD, nil, nil)
+        guard clientFD >= 0 else { print("FAIL accept: \(errnoText())"); close(listenFD); return 1 }
+
+        print("---")
+        print(ProvenanceTracer.probeReport(socket: clientFD))
+        print("---")
+
+        close(clientFD)
+        close(listenFD)
+        unlink(path)
+        return 0
+    }
+
+    private static func errnoText() -> String {
+        String(cString: strerror(errno))
     }
 }

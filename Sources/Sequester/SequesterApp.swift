@@ -7,6 +7,7 @@ struct SequesterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store = KeyStore()
     @State private var hostNames = HostNameStore()
+    @State private var appAuth = AppAuthStore()
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
 
     init() {
@@ -18,6 +19,7 @@ struct SequesterApp: App {
             KeyListView()
                 .environment(store)
                 .environment(hostNames)
+                .environment(appAuth)
                 .onAppear {
                     // Whatever path opened the window, present it like a
                     // regular app: with a menu bar and a Dock icon. The
@@ -49,6 +51,9 @@ enum SelftestCLI {
         let arguments = CommandLine.arguments
         if arguments.contains("--selftest") {
             exit(Selftest.run())
+        }
+        if arguments.contains("--selftest-provenance") {
+            exit(Selftest.provenanceProbe())
         }
         if let index = arguments.firstIndex(of: "--selftest-create-key"),
            index + 1 < arguments.count {

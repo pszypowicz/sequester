@@ -3,6 +3,7 @@ import SequesterCore
 
 enum SidebarItem: Hashable {
     case general
+    case apps
     case key(String)
 }
 
@@ -19,6 +20,8 @@ struct KeyListView: View {
             List(selection: $selection) {
                 Label("General", systemImage: "gearshape")
                     .tag(SidebarItem.general)
+                Label("Apps", systemImage: "app.badge.checkmark")
+                    .tag(SidebarItem.apps)
 
                 Section("Keys") {
                     if store.keys.isEmpty {
@@ -65,11 +68,17 @@ struct KeyListView: View {
                 .padding(12)
             }
         } detail: {
-            if case .key(let name) = selection,
-               let key = store.keys.first(where: { $0.name == name }) {
-                KeyDetailView(key: key)
-                    .id(key.name)
-            } else {
+            switch selection {
+            case .key(let name):
+                if let key = store.keys.first(where: { $0.name == name }) {
+                    KeyDetailView(key: key)
+                        .id(key.name)
+                } else {
+                    SetupView()
+                }
+            case .apps:
+                AppsView()
+            case .general, .none:
                 SetupView()
             }
         }

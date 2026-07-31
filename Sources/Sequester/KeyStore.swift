@@ -85,6 +85,16 @@ final class KeyStore {
         reload()
     }
 
+    func setAppRule(name: String, identity: String, displayName: String, state: AppState) {
+        _ = try? EnclaveKeyStore.setAppRule(name: name, identity: identity, displayName: displayName, state: state)
+        reload()
+    }
+
+    func removeAppRule(name: String, identity: String) {
+        EnclaveKeyStore.removeAppRule(name: name, identity: identity)
+        reload()
+    }
+
     func delete(name: String) throws {
         try EnclaveKeyStore.delete(name: name)
         reload()

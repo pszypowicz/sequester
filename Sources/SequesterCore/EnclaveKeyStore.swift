@@ -224,6 +224,32 @@ public enum EnclaveKeyStore {
         Log.store.log("Set branch \(rule.id, privacy: .public) of \(name, privacy: .public) to \(state.rawValue, privacy: .public)")
     }
 
+    /// Sets a per-key override of an app's standing, taking precedence over
+    /// the global authorization for this key.
+    @discardableResult
+    public static func setAppRule(name: String, identity: String, displayName: String, state: AppState) throws -> KeyMetadata {
+        let metadata = try KeyStorage.mutate(name: name) { m in
+            if let index = m.appRules.firstIndex(where: { $0.identity == identity }) {
+                m.appRules[index].state = state
+                m.appRules[index].displayName = displayName
+            } else {
+                m.appRules.append(AppRule(identity: identity, displayName: displayName, state: state))
+            }
+            return true
+        }
+        Log.store.log("Set app rule \(identity, privacy: .public) on \(name, privacy: .public) to \(state.rawValue, privacy: .public)")
+        return metadata
+    }
+
+    public static func removeAppRule(name: String, identity: String) {
+        _ = try? KeyStorage.mutate(name: name) { m in
+            let before = m.appRules.count
+            m.appRules.removeAll { $0.identity == identity }
+            return m.appRules.count != before
+        }
+        Log.store.log("Removed app rule \(identity, privacy: .public) on \(name, privacy: .public)")
+    }
+
     public static func delete(name: String) throws {
         let metadata = try KeyStorage.load(name: name).metadata
         try KeyStorage.delete(name: name)

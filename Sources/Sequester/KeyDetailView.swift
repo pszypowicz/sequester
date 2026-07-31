@@ -7,11 +7,13 @@ struct KeyDetailView: View {
 
     @Environment(KeyStore.self) private var store
     @Environment(HostNameStore.self) private var hostNames
+    @Environment(AppAuthStore.self) private var appAuth
 
     let key: KeyMetadata
     @State private var errorMessage: String?
     @State private var namingTarget: NamingTarget?
     @State private var collapsed: Set<String> = []
+    @State private var appOverridesExpanded = false
 
     var body: some View {
         Form {
@@ -91,11 +93,67 @@ struct KeyDetailView: View {
                     }
                 }
             } header: {
-                Text("Destinations")
-            } footer: {
-                Text("Each row is a binding chain: forwarding hops branch, and the last host key is the destination host reached. A standing on a hop covers every chain through it. A block anywhere on the chain wins; otherwise the most specific standing applies.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                sectionHeader("Destinations", info: "Each row is a binding chain: forwarding hops branch, and the last host key is the destination host reached. A standing on a hop covers every chain through it. A block anywhere on the chain wins; otherwise the most specific standing applies.")
+            }
+
+            Section {
+                DisclosureGroup(isExpanded: $appOverridesExpanded) {
+                    if key.appRules.isEmpty {
+                        Text("No per-key overrides. This key uses the global app authorizations.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(key.appRules) { rule in
+                            HStack(spacing: 10) {
+                                Image(systemName: rule.state == .blocked ? "xmark.shield.fill" : "checkmark.shield.fill")
+                                    .foregroundStyle(rule.state == .blocked ? .red : .green)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(rule.displayName)
+                                    Text(rule.identity)
+                                        .font(.system(.caption2, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                                Spacer()
+                                Picker("", selection: appRuleBinding(rule)) {
+                                    Text("Allowed").tag(AppState.allowed)
+                                    Text("Blocked").tag(AppState.blocked)
+                                }
+                                .pickerStyle(.segmented)
+                                .fixedSize()
+                                Button {
+                                    store.removeAppRule(name: key.name, identity: rule.identity)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                    let candidates = appAuth.authorizations.filter { auth in
+                        !key.appRules.contains { $0.identity == auth.identity }
+                    }
+                    if !candidates.isEmpty {
+                        Menu("Add override…") {
+                            ForEach(candidates) { auth in
+                                Menu(auth.displayName) {
+                                    Button("Allow for this key") {
+                                        store.setAppRule(name: key.name, identity: auth.identity,
+                                                         displayName: auth.displayName, state: .allowed)
+                                    }
+                                    Button("Block for this key") {
+                                        store.setAppRule(name: key.name, identity: auth.identity,
+                                                         displayName: auth.displayName, state: .blocked)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    sectionHeader("App overrides", info: "Override the global authorization of a specific app for this key only. A blocked app is denied; an allowed app still follows this key's destination rules.")
+                }
             }
         }
         .formStyle(.grouped)
@@ -105,6 +163,13 @@ struct KeyDetailView: View {
     }
 
     private func settingLabel(_ title: String, _ info: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+            InfoDot(text: info)
+        }
+    }
+
+    private func sectionHeader(_ title: String, info: String) -> some View {
         HStack(spacing: 4) {
             Text(title)
             InfoDot(text: info)
@@ -153,6 +218,14 @@ struct KeyDetailView: View {
         )
     }
 
+    private func appRuleBinding(_ rule: AppRule) -> Binding<AppState> {
+        Binding(
+            get: { rule.state },
+            set: { store.setAppRule(name: key.name, identity: rule.identity,
+                                    displayName: rule.displayName, state: $0) }
+        )
+    }
+
     private func rowState(_ hops: [BindingHop]) -> DestinationState {
         key.branchRules.first { $0.id == DestinationRecord.bindingChainID(hops) }?.state ?? .neutral
     }
@@ -188,7 +261,7 @@ struct KeyDetailView: View {
 
 /// An info dot that reveals text in a popover after a brief hover, matching
 /// the interaction used elsewhere in these apps' settings.
-private struct InfoDot: View {
+struct InfoDot: View {
 
     let text: String
     var monospaced: Bool = false
