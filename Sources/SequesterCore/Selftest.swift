@@ -42,8 +42,7 @@ public enum Selftest {
         }
         check("create key (keychain + enclave)") {
             try EnclaveKeyStore.create(
-                name: temporaryKeyName, description: "selftest",
-                authRequired: false, policy: .askEveryTime
+                name: temporaryKeyName, description: "selftest", authRequired: false
             )
         }
         check("key listed") {
@@ -63,10 +62,31 @@ public enum Selftest {
         }
         check("metadata update") {
             try EnclaveKeyStore.updateDescription(name: temporaryKeyName, description: "updated")
-            try EnclaveKeyStore.updatePolicy(name: temporaryKeyName, policy: .allowLocalAskForwarded)
+            try EnclaveKeyStore.setBlockForwarded(name: temporaryKeyName, blocked: true)
             let metadata = try KeyStorage.load(name: temporaryKeyName).metadata
-            guard metadata.keyDescription == "updated",
-                  metadata.policy == .allowLocalAskForwarded else {
+            guard metadata.keyDescription == "updated", metadata.blockForwarded else {
+                throw KeychainError.corruptItem
+            }
+        }
+        check("destination tracking") {
+            let hop = ChainHop(fingerprint: "SHA256:selftest", algorithm: "ssh-ed25519", forwarding: false)
+            EnclaveKeyStore.recordObservation(name: temporaryKeyName, hops: [hop])
+            EnclaveKeyStore.recordObservation(name: temporaryKeyName, hops: [hop])
+            var metadata = try KeyStorage.load(name: temporaryKeyName).metadata
+            guard metadata.destinations.count == 1, metadata.destinations[0].count == 2 else {
+                throw KeychainError.corruptItem
+            }
+            EnclaveKeyStore.setDestinationState(
+                name: temporaryKeyName, id: DestinationRecord.chainID([hop]), state: .approved
+            )
+            metadata = try KeyStorage.load(name: temporaryKeyName).metadata
+            guard metadata.destinations[0].state == .approved,
+                  PolicyEngine.evaluate(key: metadata, chain: [hop]) == .allow else {
+                throw KeychainError.corruptItem
+            }
+            EnclaveKeyStore.removeDestination(name: temporaryKeyName, id: DestinationRecord.chainID([hop]))
+            metadata = try KeyStorage.load(name: temporaryKeyName).metadata
+            guard metadata.destinations.isEmpty else {
                 throw KeychainError.corruptItem
             }
         }
@@ -94,9 +114,20 @@ public enum Selftest {
     public static func createKey(name: String) -> Int32 {
         do {
             let metadata = try EnclaveKeyStore.create(
-                name: name, description: "created by --selftest-create-key",
-                authRequired: false, policy: .allowLocalAskForwarded
+                name: name, description: "created by --selftest-create-key", authRequired: false
             )
+            // Pre-approve the deterministic chain scripts/agent-e2e.py binds
+            // with (an all-zero ssh-ed25519 host key), so the e2e signature
+            // needs no dialog.
+            var hostKeyBlob = SSHWire.lengthPrefixed("ssh-ed25519")
+            hostKeyBlob.append(SSHWire.lengthPrefixed(Data(count: 32)))
+            let hop = ChainHop(
+                fingerprint: OpenSSH.fingerprintSHA256(blob: hostKeyBlob),
+                algorithm: "ssh-ed25519",
+                forwarding: false
+            )
+            EnclaveKeyStore.recordObservation(name: name, hops: [hop])
+            EnclaveKeyStore.setDestinationState(name: name, id: DestinationRecord.chainID([hop]), state: .approved)
             print("created \(metadata.name) \(metadata.fingerprint)")
             print(metadata.publicKeyFileURL.path)
             return 0

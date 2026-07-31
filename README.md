@@ -26,16 +26,23 @@ A key is created with four settings:
 | Name                 | Yes                                                                       |
 | Touch ID requirement | No. It is baked into the key's access control by the Enclave at creation. |
 | Description          | Yes                                                                       |
-| Behavior             | Yes                                                                       |
+| Approval settings    | Yes                                                                       |
 
 The on-disk `.pub` filename is derived from a hash of the key material, so it is stable for the life of the key. The file is the contract ssh config references; the name is a label. Deleting a key destroys it permanently. There is no export, because there is nothing exportable.
 
-## Behavior modes
+## Approval
 
-- **Ask every time.** Every signature request shows an approval dialog naming the requesting process and the session it is bound to.
-- **Allow local, ask when forwarded.** Requests from sessions that OpenSSH bound as local are allowed silently. Requests arriving through a forwarded agent connection, and requests on connections with no session binding at all, show the dialog.
+Every signature request needs confirmation by default. For keys with the Touch ID requirement the Enclave's own prompt is the confirmation, carrying the requesting process and destination in its text; Sequester never stacks a second dialog on top. For other keys Sequester shows an approval dialog naming the requester and the session the request is bound to.
 
-Forwarding detection uses the `session-bind@openssh.com` extension that OpenSSH 8.9 and later sends on every agent connection. The agent records what the client reports and fails safe, so anything unbound or forwarded has to ask.
+Each key records the destinations it is asked to sign for, keyed by the exact binding chain of the connection: "github reached locally", "github reached through vm1", and "github reached through vm2" are three separate records. Each record has a standing you can set on the key's page:
+
+- **Neutral** (default): ask before signing.
+- **Approved**: sign without asking. Offered as a "don't ask again for this destination" checkbox in the approval dialog, and only for keys without the Touch ID requirement, since the Enclave prompts regardless. Approval covers exactly the observed path, so trusting github locally says nothing about forwarded use, and trusting it through vm1 says nothing about vm2.
+- **Blocked**: deny without any prompt, including the Touch ID prompt. Useful for silencing noise and for defeating prompt-fatigue attacks from a compromised host.
+
+A per-key **block forwarded requests** toggle denies everything arriving through a forwarded agent connection outright, taking precedence over approved records.
+
+Path detection uses the `session-bind@openssh.com` extension that OpenSSH 8.9 and later sends on every agent connection, one binding per hop. The agent records what the client reports and fails safe: unknown and unbound paths always ask. The binding signatures are not yet cryptographically verified, so approved records currently express the same trust the dialog itself does; verification hardening comes next.
 
 ## Setup
 

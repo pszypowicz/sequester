@@ -21,11 +21,8 @@ final class KeyStore {
         keys = EnclaveKeyStore.list()
     }
 
-    func create(name: String, description: String, authRequired: Bool, policy: SigningPolicy) throws {
-        try EnclaveKeyStore.create(
-            name: name, description: description,
-            authRequired: authRequired, policy: policy
-        )
+    func create(name: String, description: String, authRequired: Bool) throws {
+        try EnclaveKeyStore.create(name: name, description: description, authRequired: authRequired)
         reload()
     }
 
@@ -39,8 +36,18 @@ final class KeyStore {
         reload()
     }
 
-    func setPolicy(name: String, policy: SigningPolicy) throws {
-        try EnclaveKeyStore.updatePolicy(name: name, policy: policy)
+    func setBlockForwarded(name: String, blocked: Bool) throws {
+        try EnclaveKeyStore.setBlockForwarded(name: name, blocked: blocked)
+        reload()
+    }
+
+    func setDestinationState(name: String, id: String, state: DestinationState) {
+        EnclaveKeyStore.setDestinationState(name: name, id: id, state: state)
+        reload()
+    }
+
+    func removeDestination(name: String, id: String) {
+        EnclaveKeyStore.removeDestination(name: name, id: id)
         reload()
     }
 

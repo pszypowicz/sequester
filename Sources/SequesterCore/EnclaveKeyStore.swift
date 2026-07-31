@@ -49,8 +49,7 @@ public enum EnclaveKeyStore {
     }
 
     @discardableResult
-    public static func create(name: String, description: String,
-                              authRequired: Bool, policy: SigningPolicy) throws -> KeyMetadata {
+    public static func create(name: String, description: String, authRequired: Bool) throws -> KeyMetadata {
         try KeyName.validate(name)
         guard isEnclaveAvailable else { throw EnclaveKeyStoreError.enclaveUnavailable }
 
@@ -73,13 +72,12 @@ public enum EnclaveKeyStore {
             name: name,
             keyDescription: description,
             authRequired: authRequired,
-            policy: policy,
             publicKey: key.publicKey.x963Representation,
             createdAt: Date()
         )
         try KeyStorage.save(dataRepresentation: key.dataRepresentation, metadata: metadata)
         try writePublicKeyFile(metadata)
-        Log.store.log("Created key \(name, privacy: .public) (\(metadata.fingerprint, privacy: .public)), Touch ID \(authRequired, privacy: .public), policy \(policy.rawValue, privacy: .public)")
+        Log.store.log("Created key \(name, privacy: .public) (\(metadata.fingerprint, privacy: .public)), Touch ID \(authRequired, privacy: .public)")
         return metadata
     }
 
@@ -115,12 +113,44 @@ public enum EnclaveKeyStore {
     }
 
     @discardableResult
-    public static func updatePolicy(name: String, policy: SigningPolicy) throws -> KeyMetadata {
+    public static func setBlockForwarded(name: String, blocked: Bool) throws -> KeyMetadata {
         var metadata = try KeyStorage.load(name: name).metadata
-        metadata.policy = policy
+        metadata.blockForwarded = blocked
         try KeyStorage.updateMetadata(metadata)
-        Log.store.log("Updated policy of \(name, privacy: .public) to \(policy.rawValue, privacy: .public)")
+        Log.store.log("Set blockForwarded of \(name, privacy: .public) to \(blocked, privacy: .public)")
         return metadata
+    }
+
+    /// Updates the usage log for an observed chain: bumps counters for a
+    /// known path, adds a neutral record for a new one. Best effort; the
+    /// signing flow must not fail on bookkeeping.
+    public static func recordObservation(name: String, hops: [ChainHop]) {
+        guard !hops.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return }
+        let now = Date()
+        if let index = metadata.destinations.firstIndex(where: { $0.hops == hops }) {
+            metadata.destinations[index].lastUsed = now
+            metadata.destinations[index].count += 1
+        } else {
+            metadata.destinations.append(DestinationRecord(
+                hops: hops, state: .neutral, firstSeen: now, lastUsed: now, count: 1
+            ))
+        }
+        try? KeyStorage.updateMetadata(metadata)
+    }
+
+    public static func setDestinationState(name: String, id: String, state: DestinationState) {
+        guard var metadata = try? KeyStorage.load(name: name).metadata,
+              let index = metadata.destinations.firstIndex(where: { $0.id == id }) else { return }
+        metadata.destinations[index].state = state
+        try? KeyStorage.updateMetadata(metadata)
+        Log.store.log("Set destination \(id, privacy: .public) of \(name, privacy: .public) to \(state.rawValue, privacy: .public)")
+    }
+
+    public static func removeDestination(name: String, id: String) {
+        guard var metadata = try? KeyStorage.load(name: name).metadata else { return }
+        metadata.destinations.removeAll { $0.id == id }
+        try? KeyStorage.updateMetadata(metadata)
+        Log.store.log("Removed destination \(id, privacy: .public) of \(name, privacy: .public)")
     }
 
     public static func delete(name: String) throws {

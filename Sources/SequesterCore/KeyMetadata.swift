@@ -1,20 +1,59 @@
 import Foundation
 
-/// Per-key signing behavior. Evaluated by the agent before every signature;
-/// editable at any time, unlike the name and the Touch ID requirement.
-public enum SigningPolicy: String, Codable, CaseIterable, Sendable {
-    /// Every signature needs an in-app approval, local or forwarded.
-    case askEveryTime
-    /// Requests from sessions bound as local are allowed silently; forwarded
-    /// or unbound sessions require approval.
-    case allowLocalAskForwarded
+/// Per-destination standing: neutral asks, approved signs silently,
+/// blocked denies before any prompt (including Touch ID).
+public enum DestinationState: String, Codable, Sendable {
+    case neutral
+    case approved
+    case blocked
+}
 
-    public var displayName: String {
-        switch self {
-        case .askEveryTime: "Ask every time"
-        case .allowLocalAskForwarded: "Allow local, ask when forwarded"
-        }
+/// One hop of an observed session-binding chain: the host key the
+/// connection was bound to, and whether the client flagged the binding as
+/// made on behalf of a forwarded agent.
+public struct ChainHop: Codable, Hashable, Sendable {
+    public let fingerprint: String
+    public let algorithm: String
+    public let forwarding: Bool
+
+    public init(fingerprint: String, algorithm: String, forwarding: Bool) {
+        self.fingerprint = fingerprint
+        self.algorithm = algorithm
+        self.forwarding = forwarding
     }
+}
+
+/// A path a key has been asked to sign for, keyed by the exact binding
+/// chain observed. Serves as both the usage log entry and the per-path
+/// policy, so "github reached locally" and "github reached through vm1"
+/// are distinct records with independent standing.
+public struct DestinationRecord: Codable, Hashable, Sendable, Identifiable {
+    public var hops: [ChainHop]
+    public var state: DestinationState
+    public var firstSeen: Date
+    public var lastUsed: Date
+    public var count: Int
+
+    public init(hops: [ChainHop], state: DestinationState, firstSeen: Date, lastUsed: Date, count: Int) {
+        self.hops = hops
+        self.state = state
+        self.firstSeen = firstSeen
+        self.lastUsed = lastUsed
+        self.count = count
+    }
+
+    public static func chainID(_ hops: [ChainHop]) -> String {
+        hops.map { "\($0.fingerprint)\($0.forwarding ? ">" : "")" }.joined(separator: "|")
+    }
+
+    public var id: String { Self.chainID(hops) }
+
+    public var isForwarded: Bool {
+        hops.contains { $0.forwarding }
+    }
+
+    /// The final target of the chain.
+    public var destination: ChainHop? { hops.last }
 }
 
 /// Everything Sequester knows about a key besides the Secure Enclave key
@@ -29,7 +68,11 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     /// Whether the Enclave demands user presence per signature. Baked into
     /// the key's access control at creation and unchangeable afterwards.
     public let authRequired: Bool
-    public var policy: SigningPolicy
+    /// Denies every request arriving through a forwarded agent connection,
+    /// regardless of per-destination standing.
+    public var blockForwarded: Bool
+    /// Observed signing paths with their standing.
+    public var destinations: [DestinationRecord]
     /// The public key (x9.63 uncompressed point), cached at creation so
     /// listing never has to load Enclave key handles.
     public let publicKey: Data
@@ -38,13 +81,30 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     public var id: String { name }
 
     public init(name: String, keyDescription: String, authRequired: Bool,
-                policy: SigningPolicy, publicKey: Data, createdAt: Date) {
+                blockForwarded: Bool = false, destinations: [DestinationRecord] = [],
+                publicKey: Data, createdAt: Date) {
         self.name = name
         self.keyDescription = keyDescription
         self.authRequired = authRequired
-        self.policy = policy
+        self.blockForwarded = blockForwarded
+        self.destinations = destinations
         self.publicKey = publicKey
         self.createdAt = createdAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, keyDescription, authRequired, blockForwarded, destinations, publicKey, createdAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        keyDescription = try container.decode(String.self, forKey: .keyDescription)
+        authRequired = try container.decode(Bool.self, forKey: .authRequired)
+        blockForwarded = try container.decodeIfPresent(Bool.self, forKey: .blockForwarded) ?? false
+        destinations = try container.decodeIfPresent([DestinationRecord].self, forKey: .destinations) ?? []
+        publicKey = try container.decode(Data.self, forKey: .publicKey)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 
     public var publicKeyBlob: Data {
@@ -82,8 +142,8 @@ public enum KeyNameError: LocalizedError {
 }
 
 public enum KeyName {
-    /// The name becomes a filename and an ssh config token, so it is kept to
-    /// a conservative character set.
+    /// The name becomes an ssh config token and a keychain account, so it
+    /// is kept to a conservative character set.
     public static func validate(_ name: String) throws {
         let pattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
         guard name.wholeMatch(of: pattern) != nil else {

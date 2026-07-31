@@ -6,30 +6,38 @@ import SequesterCore
 /// dialogs wants anyway.
 struct DialogApprover: SigningApprover {
 
-    func approve(keyName: String, provenance: Provenance, bindings: [SessionBinding]) async -> Bool {
-        Log.app.log("Approval dialog for key \(keyName, privacy: .public), requester \(provenance.displayName, privacy: .public)")
-        let allowed = await MainActor.run {
+    func approve(_ request: ApprovalRequest) async -> ApprovalDecision {
+        Log.app.log("Approval dialog for key \(request.keyName, privacy: .public), requester \(request.provenance.displayName, privacy: .public)")
+        let decision: ApprovalDecision = await MainActor.run {
             NSApp.activate(ignoringOtherApps: true)
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Allow SSH signature with \"\(keyName)\"?"
-            alert.informativeText = Self.details(provenance: provenance, bindings: bindings)
+            alert.messageText = "Allow SSH signature with \"\(request.keyName)\"?"
+            alert.informativeText = Self.details(request)
             alert.addButton(withTitle: "Allow")
             alert.addButton(withTitle: "Deny")
-            return alert.runModal() == .alertFirstButtonReturn
+            if request.canRemember {
+                alert.showsSuppressionButton = true
+                alert.suppressionButton?.title = "Don't ask again for this destination"
+            }
+            guard alert.runModal() == .alertFirstButtonReturn else { return .deny }
+            if request.canRemember, alert.suppressionButton?.state == .on {
+                return .allowAndRemember
+            }
+            return .allow
         }
-        Log.app.log("Approval dialog result for \(keyName, privacy: .public): \(allowed ? "allowed" : "denied", privacy: .public)")
-        return allowed
+        Log.app.log("Approval dialog result for \(request.keyName, privacy: .public): \(String(describing: decision), privacy: .public)")
+        return decision
     }
 
-    private static func details(provenance: Provenance, bindings: [SessionBinding]) -> String {
-        var lines = ["Requested by \(provenance.displayName) (pid \(provenance.pid))."]
-        if bindings.isEmpty {
+    private static func details(_ request: ApprovalRequest) -> String {
+        var lines = ["Requested by \(request.provenance.displayName) (pid \(request.provenance.pid))."]
+        if request.chain.isEmpty {
             lines.append("The connection is not bound to any SSH session, so the destination is unknown.")
         }
-        for binding in bindings {
-            let kind = binding.isForwarding ? "FORWARDED via" : "bound to"
-            lines.append("Session \(kind) host key \(binding.hostKeyFingerprint) (\(binding.hostKeyAlgorithm)).")
+        for hop in request.chain {
+            let kind = hop.forwarding ? "FORWARDED via" : "bound to"
+            lines.append("Session \(kind) host key \(hop.fingerprint) (\(hop.algorithm)).")
         }
         return lines.joined(separator: "\n")
     }

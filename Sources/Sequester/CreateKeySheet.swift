@@ -9,7 +9,6 @@ struct CreateKeySheet: View {
     @State private var name = ""
     @State private var keyDescription = ""
     @State private var authRequired = true
-    @State private var policy: SigningPolicy = .askEveryTime
     @State private var errorMessage: String?
 
     var body: some View {
@@ -21,13 +20,8 @@ struct CreateKeySheet: View {
                 }
                 Section {
                     Toggle("Require Touch ID for every signature", isOn: $authRequired)
-                    Picker("Behavior", selection: $policy) {
-                        ForEach(SigningPolicy.allCases, id: \.self) { policy in
-                            Text(policy.displayName).tag(policy)
-                        }
-                    }
                 } footer: {
-                    Text("The Touch ID requirement is baked into the key at creation and is permanent. Name, description, and behavior can be changed anytime; the public key filename is derived from the key itself, so renaming never breaks SSH config.")
+                    Text("The Touch ID requirement is baked into the key at creation and is permanent. Name and description can be changed anytime; the public key filename is derived from the key itself, so renaming never breaks SSH config. Approval settings live on the key's page.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -54,12 +48,7 @@ struct CreateKeySheet: View {
 
     private func create() {
         do {
-            try store.create(
-                name: name,
-                description: keyDescription,
-                authRequired: authRequired,
-                policy: policy
-            )
+            try store.create(name: name, description: keyDescription, authRequired: authRequired)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

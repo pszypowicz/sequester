@@ -50,7 +50,7 @@ struct KeyListView: View {
                     }
                 }
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 220)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 360)
             .safeAreaInset(edge: .bottom) {
                 Button {
                     showCreate = true

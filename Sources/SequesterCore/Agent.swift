@@ -3,7 +3,8 @@ import OSLog
 
 /// One session-bind@openssh.com record received on a connection. OpenSSH
 /// 8.9+ clients bind every agent connection to the SSH session it serves,
-/// flagging connections opened on behalf of a forwarded agent.
+/// flagging connections opened on behalf of a forwarded agent. A forwarded
+/// connection accumulates one binding per hop.
 public struct SessionBinding: Sendable, Hashable {
     public let hostKeyAlgorithm: String
     public let hostKeyFingerprint: String
@@ -21,15 +22,33 @@ public final class AgentSession: @unchecked Sendable {
         self.provenance = provenance
     }
 
-    public var isForwarded: Bool {
-        bindings.contains { $0.isForwarding }
+    public var chain: [ChainHop] {
+        bindings.map {
+            ChainHop(fingerprint: $0.hostKeyFingerprint, algorithm: $0.hostKeyAlgorithm, forwarding: $0.isForwarding)
+        }
     }
 }
 
-/// Presented with the facts of a signature request, returns whether the
-/// user allows it. The app implements this with a dialog.
+/// The facts of a signature request presented for confirmation.
+public struct ApprovalRequest: Sendable {
+    public let keyName: String
+    public let provenance: Provenance
+    public let chain: [ChainHop]
+    /// Whether "don't ask again" is offered; false for unbound requests,
+    /// which have no destination to remember.
+    public let canRemember: Bool
+}
+
+public enum ApprovalDecision: Sendable {
+    case deny
+    case allow
+    case allowAndRemember
+}
+
+/// Presented with the facts of a signature request, returns the user's
+/// decision. The app implements this with a dialog.
 public protocol SigningApprover: Sendable {
-    func approve(keyName: String, provenance: Provenance, bindings: [SessionBinding]) async -> Bool
+    func approve(_ request: ApprovalRequest) async -> ApprovalDecision
 }
 
 /// The SSH agent protocol handler: parses one client message, produces one
@@ -94,26 +113,47 @@ public struct Agent: Sendable {
             return Response.failure
         }
 
-        let needsApproval = requiresApproval(policy: key.policy, session: session)
-        Log.agent.log("Sign request: key \(key.name, privacy: .public), requester \(session.provenance.displayName, privacy: .public) (pid \(session.provenance.pid, privacy: .public)), policy \(key.policy.rawValue, privacy: .public), forwarded \(session.isForwarded, privacy: .public), bindings \(session.bindings.count, privacy: .public), approval needed \(needsApproval, privacy: .public)")
-        if needsApproval {
-            let allowed = await approver.approve(
-                keyName: key.name,
-                provenance: session.provenance,
-                bindings: session.bindings
-            )
-            guard allowed else {
-                Log.agent.log("Denied signature with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
-                return Response.failure
+        let chain = session.chain
+        if !chain.isEmpty {
+            EnclaveKeyStore.recordObservation(name: key.name, hops: chain)
+        }
+
+        let decision = PolicyEngine.evaluate(key: key, chain: chain)
+        Log.agent.log("Sign request: key \(key.name, privacy: .public), requester \(session.provenance.displayName, privacy: .public) (pid \(session.provenance.pid, privacy: .public)), chain \(DestinationRecord.chainID(chain), privacy: .public), decision \(String(describing: decision), privacy: .public)")
+
+        switch decision {
+        case .deny:
+            return Response.failure
+        case .allow:
+            break
+        case .ask:
+            // For Touch ID keys the Enclave prompt is the ask; the reason
+            // string carries the request context. Other keys get the app
+            // dialog.
+            if !key.authRequired {
+                let approval = await approver.approve(ApprovalRequest(
+                    keyName: key.name,
+                    provenance: session.provenance,
+                    chain: chain,
+                    canRemember: !chain.isEmpty
+                ))
+                switch approval {
+                case .deny:
+                    Log.agent.log("Denied signature with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
+                    return Response.failure
+                case .allowAndRemember:
+                    EnclaveKeyStore.setDestinationState(name: key.name, id: DestinationRecord.chainID(chain), state: .approved)
+                case .allow:
+                    break
+                }
             }
-            Log.agent.log("User approved signature with \(key.name, privacy: .public)")
         }
 
         do {
             let raw = try EnclaveKeyStore.sign(
                 name: key.name,
                 data: dataToSign,
-                reason: "sign an SSH request from \(session.provenance.displayName) with key \"\(key.name)\""
+                reason: signReason(key: key, session: session, chain: chain)
             )
             Log.agent.log("Signed with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
             var payload = Data([Response.signResponse])
@@ -127,8 +167,19 @@ public struct Agent: Sendable {
         }
     }
 
+    private func signReason(key: KeyMetadata, session: AgentSession, chain: [ChainHop]) -> String {
+        var reason = "sign an SSH request from \(session.provenance.displayName) with key \"\(key.name)\""
+        if let destination = chain.last {
+            reason += " for \(destination.fingerprint)"
+        }
+        if chain.contains(where: { $0.forwarding }) {
+            reason += " (FORWARDED)"
+        }
+        return reason
+    }
+
     /// Records the binding the client reports; the policy layer fails safe,
-    /// so any forwarded or unbound session asks before signing.
+    /// so any forwarded or unknown path asks before signing.
     private func handleExtension(reader: inout SSHWireReader, session: AgentSession) -> Data {
         guard let name = try? reader.readUTF8String() else { return Response.failure }
         guard name == "session-bind@openssh.com" else {
@@ -149,14 +200,5 @@ public struct Agent: Sendable {
         session.bindings.append(binding)
         Log.agent.log("Session bound to \(binding.hostKeyFingerprint, privacy: .public) (\(binding.hostKeyAlgorithm, privacy: .public)), forwarding \(binding.isForwarding, privacy: .public), requester \(session.provenance.displayName, privacy: .public)")
         return Response.success
-    }
-
-    private func requiresApproval(policy: SigningPolicy, session: AgentSession) -> Bool {
-        switch policy {
-        case .askEveryTime:
-            true
-        case .allowLocalAskForwarded:
-            session.bindings.isEmpty || session.isForwarded
-        }
     }
 }

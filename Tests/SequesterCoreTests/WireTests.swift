@@ -111,8 +111,8 @@ import CryptoKit
 @Suite struct AgentProtocolTests {
 
     private struct DenyAll: SigningApprover {
-        func approve(keyName: String, provenance: Provenance, bindings: [SessionBinding]) async -> Bool {
-            false
+        func approve(_ request: ApprovalRequest) async -> ApprovalDecision {
+            .deny
         }
     }
 
@@ -142,7 +142,9 @@ import CryptoKit
         #expect(session.bindings.count == 1)
         #expect(session.bindings[0].isForwarding)
         #expect(session.bindings[0].hostKeyAlgorithm == "ssh-ed25519")
-        #expect(session.isForwarded)
+        #expect(session.chain == [SessionBinding](session.bindings).map {
+            ChainHop(fingerprint: $0.hostKeyFingerprint, algorithm: $0.hostKeyAlgorithm, forwarding: $0.isForwarding)
+        })
     }
 
     @Test func unsupportedExtensionFails() async {
@@ -151,5 +153,74 @@ import CryptoKit
         payload.append(SSHWire.lengthPrefixed("some-other@example.com"))
         let response = await agent.handle(message: payload, session: makeSession())
         #expect(response == Data([5]))
+    }
+}
+
+@Suite struct PolicyEngineTests {
+
+    private func makeKey(authRequired: Bool = false, blockForwarded: Bool = false,
+                         destinations: [DestinationRecord] = []) -> KeyMetadata {
+        KeyMetadata(
+            name: "test", keyDescription: "", authRequired: authRequired,
+            blockForwarded: blockForwarded, destinations: destinations,
+            publicKey: Data(count: 65), createdAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    private let local = ChainHop(fingerprint: "SHA256:aaa", algorithm: "ssh-ed25519", forwarding: false)
+    private let hop = ChainHop(fingerprint: "SHA256:vm1", algorithm: "ssh-ed25519", forwarding: true)
+
+    private func record(_ hops: [ChainHop], _ state: DestinationState) -> DestinationRecord {
+        DestinationRecord(
+            hops: hops, state: state,
+            firstSeen: Date(timeIntervalSince1970: 0), lastUsed: Date(timeIntervalSince1970: 0), count: 1
+        )
+    }
+
+    @Test func unknownChainAsks() {
+        #expect(PolicyEngine.evaluate(key: makeKey(), chain: [local]) == .ask)
+    }
+
+    @Test func emptyChainAsks() {
+        #expect(PolicyEngine.evaluate(key: makeKey(), chain: []) == .ask)
+    }
+
+    @Test func blockForwardedDeniesForwardedOnly() {
+        let key = makeKey(blockForwarded: true)
+        #expect(PolicyEngine.evaluate(key: key, chain: [hop, local]) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, chain: [local]) == .ask)
+    }
+
+    @Test func blockForwardedBeatsApprovedRecord() {
+        let chain = [hop, local]
+        let key = makeKey(blockForwarded: true, destinations: [record(chain, .approved)])
+        #expect(PolicyEngine.evaluate(key: key, chain: chain) == .deny)
+    }
+
+    @Test func recordStatesApply() {
+        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .approved)]), chain: [local]) == .allow)
+        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .blocked)]), chain: [local]) == .deny)
+        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .neutral)]), chain: [local]) == .ask)
+    }
+
+    @Test func chainIdentityIncludesRoute() {
+        let viaVM1 = [hop, local]
+        let key = makeKey(destinations: [record(viaVM1, .approved)])
+        let viaVM2 = [ChainHop(fingerprint: "SHA256:vm2", algorithm: "ssh-ed25519", forwarding: true), local]
+        #expect(PolicyEngine.evaluate(key: key, chain: viaVM1) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, chain: viaVM2) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, chain: [local]) == .ask)
+    }
+
+    @Test func metadataDecodesWithoutNewFields() throws {
+        let legacy = """
+        {"name":"k","keyDescription":"","authRequired":false,"policy":"askEveryTime",\
+        "publicKey":"\(Data(count: 65).base64EncodedString())","createdAt":0}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let metadata = try decoder.decode(KeyMetadata.self, from: Data(legacy.utf8))
+        #expect(metadata.blockForwarded == false)
+        #expect(metadata.destinations.isEmpty)
     }
 }

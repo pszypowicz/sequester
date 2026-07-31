@@ -13,9 +13,10 @@ signature against the key's public point.
 
 Run with: uv run scripts/agent-e2e.py --key-name <name>
 
-A key with the "allow local, ask when forwarded" behavior and no Touch ID
-requirement signs without any UI, which makes this scriptable. Keys that
-require approval pop the app's dialog; expect to interact or time out.
+A key created by --selftest-create-key has this script's deterministic
+binding chain pre-approved and no Touch ID requirement, so it signs
+without any UI, which makes this scriptable. Keys without that standing
+pop the app's dialog; expect to interact or time out.
 """
 
 import argparse
