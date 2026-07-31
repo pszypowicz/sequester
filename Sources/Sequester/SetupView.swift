@@ -34,14 +34,7 @@ struct SetupView: View {
                     }
                 }
                 LabeledContent("Socket") {
-                    HStack {
-                        Text(SequesterPaths.socketURL.path)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                        Button("Copy") {
-                            copyToPasteboard(SequesterPaths.socketURL.path)
-                        }
-                    }
+                    CopyableText(text: SequesterPaths.socketURL.path)
                 }
             }
 

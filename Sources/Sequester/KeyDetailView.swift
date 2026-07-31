@@ -6,13 +6,12 @@ struct KeyDetailView: View {
     @Environment(KeyStore.self) private var store
 
     let key: KeyMetadata
-    @Binding var selection: String?
+    @Binding var selection: SidebarItem?
     @State private var nameDraft: String
     @State private var descriptionDraft: String
-    @State private var confirmDelete = false
     @State private var errorMessage: String?
 
-    init(key: KeyMetadata, selection: Binding<String?>) {
+    init(key: KeyMetadata, selection: Binding<SidebarItem?>) {
         self.key = key
         _selection = selection
         _nameDraft = State(initialValue: key.name)
@@ -43,40 +42,19 @@ struct KeyDetailView: View {
                 LabeledContent("Created", value: key.createdAt.formatted(date: .abbreviated, time: .shortened))
                 LabeledContent("Touch ID", value: key.authRequired ? "Required for every signature" : "Not required")
                 LabeledContent("SHA256 fingerprint") {
-                    Text(key.fingerprint)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
+                    CopyableText(text: key.fingerprint)
                 }
                 LabeledContent("MD5 fingerprint") {
-                    Text(key.fingerprintMD5)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
+                    CopyableText(text: key.fingerprintMD5)
                 }
             }
 
             Section("Public key") {
-                LabeledContent("File") {
-                    Text(key.publicKeyFileURL.path)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
+                LabeledContent("File path") {
+                    CopyableText(text: key.publicKeyFileURL.path)
                 }
-                Text(key.publicKeyLine)
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .lineLimit(3)
-                HStack {
-                    Button("Copy Public Key") {
-                        copyToPasteboard(key.publicKeyLine)
-                    }
-                    Button("Copy File Path") {
-                        copyToPasteboard(key.publicKeyFileURL.path)
-                    }
-                }
-            }
-
-            Section {
-                Button("Delete Key…", role: .destructive) {
-                    confirmDelete = true
+                LabeledContent("Public key") {
+                    CopyableText(text: key.publicKeyLine)
                 }
             }
 
@@ -87,16 +65,6 @@ struct KeyDetailView: View {
             }
         }
         .formStyle(.grouped)
-        .confirmationDialog(
-            "Delete \"\(key.name)\"?",
-            isPresented: $confirmDelete
-        ) {
-            Button("Delete", role: .destructive) {
-                attempt { try store.delete(name: key.name) }
-            }
-        } message: {
-            Text("The Secure Enclave key is destroyed and its public key file is removed. Hosts using this key will stop accepting logins. This cannot be undone.")
-        }
     }
 
     private var policyBinding: Binding<SigningPolicy> {
@@ -110,7 +78,7 @@ struct KeyDetailView: View {
         let newName = nameDraft
         attempt {
             try store.rename(name: key.name, to: newName)
-            selection = newName
+            selection = .key(newName)
         }
     }
 
@@ -125,10 +93,5 @@ struct KeyDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    private func copyToPasteboard(_ string: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(string, forType: .string)
     }
 }

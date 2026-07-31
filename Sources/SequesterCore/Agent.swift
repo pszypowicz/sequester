@@ -127,9 +127,8 @@ public struct Agent: Sendable {
         }
     }
 
-    /// v1 records what the client claims and fails safe: any forwarded or
-    /// unbound session asks. Verifying the binding signature against the
-    /// host key is a planned hardening step.
+    /// Records the binding the client reports; the policy layer fails safe,
+    /// so any forwarded or unbound session asks before signing.
     private func handleExtension(reader: inout SSHWireReader, session: AgentSession) -> Data {
         guard let name = try? reader.readUTF8String() else { return Response.failure }
         guard name == "session-bind@openssh.com" else {

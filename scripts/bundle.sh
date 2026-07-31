@@ -42,8 +42,10 @@ cp .build/release/Sequester "$APP/MacOS/Sequester"
 cp Sources/Sequester/Info.plist "$APP/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Info.plist"
 
+ENTITLEMENTS="Sources/Sequester/Sequester.entitlements"
+
 if [[ "$identity" == "adhoc" ]]; then
-  codesign --sign - --force --options runtime .build/Sequester.app
+  codesign --sign - --force --options runtime --entitlements "$ENTITLEMENTS" .build/Sequester.app
 else
   # || true: with set -e, a failing security query (locked/absent
   # keychain) would abort before the explicit error below.
@@ -55,7 +57,7 @@ else
     exit 1
   fi
   # --timestamp: notarization requires a secure timestamp.
-  codesign --sign "$sign" --force --options runtime --timestamp .build/Sequester.app
+  codesign --sign "$sign" --force --options runtime --timestamp --entitlements "$ENTITLEMENTS" .build/Sequester.app
 fi
 
 echo "Built .build/Sequester.app"

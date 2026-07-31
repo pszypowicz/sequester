@@ -7,9 +7,9 @@
 
 Speaks the SSH agent protocol as a raw client: optionally binds the
 connection with session-bind@openssh.com (with a fabricated host key, which
-v1 records but does not verify), lists identities, requests a signature
-with the named key, and verifies the returned ECDSA P-256 signature against
-the key's public point.
+the agent records without verifying), lists identities, requests a
+signature with the named key, and verifies the returned ECDSA P-256
+signature against the key's public point.
 
 Run with: uv run scripts/agent-e2e.py --key-name <name>
 
@@ -110,7 +110,9 @@ def main() -> None:
     parser.add_argument("--key-name", required=True, help="key to sign with (its agent comment)")
     parser.add_argument(
         "--socket",
-        default=os.path.expanduser("~/.sequester/agent.sock"),
+        default=os.path.expanduser(
+            "~/Library/Containers/cz.szypowi.sequester/Data/.sequester/agent.sock"
+        ),
         help="agent socket path (default: %(default)s)",
     )
     bind = parser.add_mutually_exclusive_group()

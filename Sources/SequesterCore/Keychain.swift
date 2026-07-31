@@ -27,12 +27,6 @@ public enum KeychainError: LocalizedError {
 /// is the Enclave key's dataRepresentation (an encrypted blob only this
 /// Mac's Enclave can use), and the generic attribute carries the
 /// KeyMetadata JSON.
-///
-/// The data protection keychain would be preferable, but on macOS its
-/// required keychain-access-groups entitlement is restricted and needs an
-/// embedded provisioning profile (AMFI kills the process otherwise); see
-/// issue #1. The security-relevant access control lives inside the Enclave
-/// key blob either way.
 public enum KeyStorage {
 
     static let service = "cz.szypowi.sequester.keys"

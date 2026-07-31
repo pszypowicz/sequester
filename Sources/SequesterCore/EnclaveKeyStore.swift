@@ -5,9 +5,13 @@ import LocalAuthentication
 public enum SequesterPaths {
 
     /// Everything lives in one flat directory: the agent socket and the
-    /// public key files. Short and space-free so ssh config stays clean.
+    /// public key files. NSHomeDirectory resolves to the app container in
+    /// the sandboxed app, so this is
+    /// ~/Library/Containers/cz.szypowi.sequester/Data/.sequester. The path
+    /// has no spaces, and unsandboxed processes like ssh can follow it
+    /// freely; only this app is confined by the sandbox.
     public static var directory: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appending(path: ".sequester")
+        URL(filePath: NSHomeDirectory()).appending(path: ".sequester")
     }
 
     public static var socketURL: URL {

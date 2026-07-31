@@ -9,7 +9,7 @@ let package = Package(
         .executableTarget(
             name: "Sequester",
             dependencies: ["SequesterCore"],
-            exclude: ["Info.plist"],
+            exclude: ["Info.plist", "Sequester.entitlements"],
             plugins: [.plugin(name: "BuildMetadata")]
         ),
         .testTarget(
