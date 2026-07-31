@@ -313,6 +313,25 @@ import CryptoKit
         #expect(PolicyEngine.evaluate(key: key, chain: [vm2, github]) == .allow)
     }
 
+    @Test func lockedDeniesUnapprovedButKeepsStandings() {
+        let approved = makeKey(destinations: [record([github], .approved)])
+        var lockedApproved = approved
+        lockedApproved.locked = true
+        // Approved paths still sign, unknown paths deny instead of ask.
+        #expect(PolicyEngine.evaluate(key: lockedApproved, chain: [github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: lockedApproved, chain: [vm1, github]) == .deny)
+
+        // Locking overrides auto-approve too: nothing new, even local.
+        var lockedAuto = makeKey(autoApprove: true)
+        lockedAuto.locked = true
+        #expect(PolicyEngine.evaluate(key: lockedAuto, chain: [github]) == .deny)
+
+        // A blocked path stays blocked (deny), unaffected by lock.
+        var lockedBlocked = makeKey(destinations: [record([github], .blocked)])
+        lockedBlocked.locked = true
+        #expect(PolicyEngine.evaluate(key: lockedBlocked, chain: [github]) == .deny)
+    }
+
     @Test func autoApproveIsLocalOnly() {
         let key = makeKey(autoApprove: true)
         // Local (no forwarding) signs silently.

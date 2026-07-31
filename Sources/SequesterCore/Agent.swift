@@ -171,15 +171,22 @@ public struct Agent: Sendable {
                     chain: chain,
                     canRemember: !chain.isEmpty
                 ))
-                guard approval.allowed else {
-                    Log.agent.log("Denied signature with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
-                    return Response.failure
-                }
                 if let destination = chain.last, let name = approval.destinationName {
                     HostNames.shared.setName(name, for: destination.fingerprint)
                 }
-                if approval.remember {
-                    EnclaveKeyStore.setDestinationState(name: key.name, id: DestinationRecord.chainID(chain), state: .approved)
+                // "Don't ask again" applies to either choice: allow remembers
+                // as approved, deny remembers as blocked, which lets one
+                // dialog end a stream of requests.
+                if approval.remember, !chain.isEmpty {
+                    EnclaveKeyStore.setDestinationState(
+                        name: key.name,
+                        id: DestinationRecord.chainID(chain),
+                        state: approval.allowed ? .approved : .blocked
+                    )
+                }
+                guard approval.allowed else {
+                    Log.agent.log("Denied signature with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
+                    return Response.failure
                 }
             }
         }

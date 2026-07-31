@@ -130,6 +130,15 @@ public enum EnclaveKeyStore {
         return metadata
     }
 
+    @discardableResult
+    public static func setLocked(name: String, locked: Bool) throws -> KeyMetadata {
+        var metadata = try KeyStorage.load(name: name).metadata
+        metadata.locked = locked
+        try KeyStorage.updateMetadata(metadata)
+        Log.store.log("Set locked of \(name, privacy: .public) to \(locked, privacy: .public)")
+        return metadata
+    }
+
     /// Updates the usage log for an observed chain: bumps counters for a
     /// known path, adds a neutral record for a new one. Best effort; the
     /// signing flow must not fail on bookkeeping.

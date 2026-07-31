@@ -93,6 +93,9 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     /// Only meaningful for keys without the Touch ID requirement, whose
     /// Enclave prompt cannot be skipped.
     public var autoApprove: Bool
+    /// Finalizes the key to its current standings: nothing new is learned
+    /// or asked, so any destination that is not already approved is denied.
+    public var locked: Bool
     /// Observed signing paths with their standing.
     public var destinations: [DestinationRecord]
     /// Standings applied to whole branches of the destination tree.
@@ -105,7 +108,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     public var id: String { name }
 
     public init(name: String, keyDescription: String, authRequired: Bool,
-                blockForwarded: Bool = false, autoApprove: Bool = false,
+                blockForwarded: Bool = false, autoApprove: Bool = false, locked: Bool = false,
                 destinations: [DestinationRecord] = [],
                 branchRules: [BranchRule] = [], publicKey: Data, createdAt: Date) {
         self.name = name
@@ -113,6 +116,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         self.authRequired = authRequired
         self.blockForwarded = blockForwarded
         self.autoApprove = autoApprove
+        self.locked = locked
         self.destinations = destinations
         self.branchRules = branchRules
         self.publicKey = publicKey
@@ -120,7 +124,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, keyDescription, authRequired, blockForwarded, autoApprove
+        case name, keyDescription, authRequired, blockForwarded, autoApprove, locked
         case destinations, branchRules, publicKey, createdAt
     }
 
@@ -131,6 +135,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         authRequired = try container.decode(Bool.self, forKey: .authRequired)
         blockForwarded = try container.decodeIfPresent(Bool.self, forKey: .blockForwarded) ?? false
         autoApprove = try container.decodeIfPresent(Bool.self, forKey: .autoApprove) ?? false
+        locked = try container.decodeIfPresent(Bool.self, forKey: .locked) ?? false
         destinations = try container.decodeIfPresent([DestinationRecord].self, forKey: .destinations) ?? []
         branchRules = try container.decodeIfPresent([BranchRule].self, forKey: .branchRules) ?? []
         publicKey = try container.decode(Data.self, forKey: .publicKey)

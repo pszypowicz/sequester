@@ -13,8 +13,17 @@ final class KeyStore {
 
     var enclaveAvailable: Bool { EnclaveKeyStore.isEnclaveAvailable }
 
+    private var observer: (any NSObjectProtocol)?
+
     init() {
         reload()
+        // Reload live when the agent records or approves a destination on a
+        // background thread, so an open key page updates in place.
+        observer = NotificationCenter.default.addObserver(
+            forName: .sequesterKeysDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reload() }
+        }
     }
 
     func reload() {
@@ -43,6 +52,11 @@ final class KeyStore {
 
     func setAutoApprove(name: String, enabled: Bool) throws {
         try EnclaveKeyStore.setAutoApprove(name: name, enabled: enabled)
+        reload()
+    }
+
+    func setLocked(name: String, locked: Bool) throws {
+        try EnclaveKeyStore.setLocked(name: name, locked: locked)
         reload()
     }
 

@@ -1,6 +1,12 @@
 import Foundation
 import Security
 
+public extension Notification.Name {
+    /// Posted whenever a key's persisted metadata changes, so an open UI can
+    /// reload live as destinations are observed or approved.
+    static let sequesterKeysDidChange = Notification.Name("cz.szypowi.sequester.keysDidChange")
+}
+
 public enum KeychainError: LocalizedError {
     case status(OSStatus)
     case notFound(String)
@@ -50,12 +56,16 @@ public enum KeyStorage {
         let status = SecItemAdd(attributes as CFDictionary, nil)
         switch status {
         case errSecSuccess:
-            return
+            postChange()
         case errSecDuplicateItem:
             throw KeychainError.duplicate(metadata.name)
         default:
             throw KeychainError.status(status)
         }
+    }
+
+    private static func postChange() {
+        NotificationCenter.default.post(name: .sequesterKeysDidChange, object: nil)
     }
 
     public static func list() throws -> [KeyMetadata] {
@@ -105,7 +115,7 @@ public enum KeyStorage {
         let status = SecItemUpdate(baseQuery(name: oldName) as CFDictionary, update as CFDictionary)
         switch status {
         case errSecSuccess:
-            return
+            postChange()
         case errSecItemNotFound:
             throw KeychainError.notFound(oldName)
         case errSecDuplicateItem:
@@ -122,11 +132,13 @@ public enum KeyStorage {
         let status = SecItemUpdate(baseQuery(name: metadata.name) as CFDictionary, update as CFDictionary)
         if status == errSecItemNotFound { throw KeychainError.notFound(metadata.name) }
         guard status == errSecSuccess else { throw KeychainError.status(status) }
+        postChange()
     }
 
     public static func delete(name: String) throws {
         let status = SecItemDelete(baseQuery(name: name) as CFDictionary)
         if status == errSecItemNotFound { throw KeychainError.notFound(name) }
         guard status == errSecSuccess else { throw KeychainError.status(status) }
+        postChange()
     }
 }

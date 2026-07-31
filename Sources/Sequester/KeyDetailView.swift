@@ -29,6 +29,7 @@ struct KeyDetailView: View {
                 if !key.authRequired {
                     Toggle("Approve local requests without asking", isOn: autoApproveBinding)
                 }
+                Toggle("Lock to current destinations", isOn: lockedBinding)
             } header: {
                 Text("Approval")
             } footer: {
@@ -97,13 +98,29 @@ struct KeyDetailView: View {
     }
 
     private var approvalCaption: String {
-        if key.authRequired {
+        if key.locked {
+            "Locked: this key signs only for destinations you have already approved. Everything else is denied without asking. Turn off to allow new destinations again."
+        } else if key.authRequired {
             "Touch ID is enforced by the Secure Enclave and cannot be bypassed or replaced by Sequester. Blocked destinations and blocked forwarded requests are denied before any prompt appears."
         } else if key.autoApprove {
             "This key signs local (non-forwarded) requests with no dialog and no naming prompt. Forwarded requests still ask, and blocked destinations are always denied."
         } else {
             "Sequester asks before each signature unless the destination is approved. Blocked destinations and blocked forwarded requests are denied without asking."
         }
+    }
+
+    private var lockedBinding: Binding<Bool> {
+        Binding(
+            get: { key.locked },
+            set: { locked in
+                do {
+                    try store.setLocked(name: key.name, locked: locked)
+                    errorMessage = nil
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        )
     }
 
     private var autoApproveBinding: Binding<Bool> {
