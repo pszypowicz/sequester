@@ -5,6 +5,8 @@ public extension Notification.Name {
     /// Posted whenever a key's persisted metadata changes, so an open UI can
     /// reload live as destinations are observed or approved.
     static let sequesterKeysDidChange = Notification.Name("cz.szypowi.sequester.keysDidChange")
+    /// Posted whenever the global app-authorization list changes.
+    static let sequesterAppsDidChange = Notification.Name("cz.szypowi.sequester.appsDidChange")
 }
 
 public enum KeychainError: LocalizedError {
@@ -165,5 +167,112 @@ public enum KeyStorage {
         if status == errSecItemNotFound { throw KeychainError.notFound(name) }
         guard status == errSecSuccess else { throw KeychainError.status(status) }
         postChange()
+    }
+}
+
+/// Persistence for global app authorizations, in one keychain item so the
+/// list is protected by the same code-signature-scoped access as the keys
+/// themselves: a co-resident process cannot add itself to the allowlist the
+/// way it could edit a plain file in the user-owned container. Stored as a
+/// JSON array in the value of a single generic-password item.
+public enum AppAuthorizationStore {
+
+    static let service = "cz.szypowi.sequester.apps"
+    private static let account = "authorizations"
+
+    private static let mutationLock = NSLock()
+
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var cache: [AppAuthorization]?
+
+    private static func baseQuery() -> [CFString: Any] {
+        [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: account,
+        ]
+    }
+
+    /// Cached because it is read on the signing hot path (once per request
+    /// for a verified app with no per-key rule). This store is the only
+    /// writer, so setState and remove keep the cache current.
+    public static func list() -> [AppAuthorization] {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if let cache {
+            return cache
+        }
+        let loaded = load()
+        cache = loaded
+        return loaded
+    }
+
+    public static func state(for identity: String) -> AppState? {
+        list().first { $0.identity == identity }?.state
+    }
+
+    /// Records or updates an app's global standing and bumps its last-used
+    /// timestamp. Serialized so a signature-thread write and a UI edit cannot
+    /// clobber each other.
+    public static func setState(identity: String, displayName: String, state: AppState, now: Date) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+        var items = load()
+        if let index = items.firstIndex(where: { $0.identity == identity }) {
+            items[index].state = state
+            items[index].displayName = displayName
+            items[index].lastUsed = now
+        } else {
+            items.append(AppAuthorization(
+                identity: identity, displayName: displayName, state: state, firstSeen: now, lastUsed: now
+            ))
+        }
+        save(items)
+        replaceCache(items)
+        postChange()
+    }
+
+    public static func remove(identity: String) {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+        var items = load()
+        let before = items.count
+        items.removeAll { $0.identity == identity }
+        guard items.count != before else { return }
+        save(items)
+        replaceCache(items)
+        postChange()
+    }
+
+    private static func load() -> [AppAuthorization] {
+        var query = baseQuery()
+        query[kSecMatchLimit] = kSecMatchLimitOne
+        query[kSecReturnData] = true
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return [] }
+        return (try? JSONDecoder().decode([AppAuthorization].self, from: data)) ?? []
+    }
+
+    private static func save(_ items: [AppAuthorization]) {
+        guard let data = try? JSONEncoder().encode(items) else { return }
+        let update: [CFString: Any] = [kSecValueData: data]
+        let status = SecItemUpdate(baseQuery() as CFDictionary, update as CFDictionary)
+        if status == errSecItemNotFound {
+            var attributes = baseQuery()
+            attributes[kSecValueData] = data
+            attributes[kSecAttrLabel] = "Sequester: app authorizations"
+            SecItemAdd(attributes as CFDictionary, nil)
+        }
+    }
+
+    private static func replaceCache(_ items: [AppAuthorization]) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        cache = items
+    }
+
+    private static func postChange() {
+        NotificationCenter.default.post(name: .sequesterAppsDidChange, object: nil)
     }
 }

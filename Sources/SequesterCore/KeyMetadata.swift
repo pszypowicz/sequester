@@ -100,6 +100,9 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     public var destinations: [DestinationRecord]
     /// Standings applied to whole branches of the destination tree.
     public var branchRules: [BranchRule]
+    /// Per-key overrides of an app's standing, taking precedence over the
+    /// global authorization for this key.
+    public var appRules: [AppRule]
     /// The public key (x9.63 uncompressed point), cached at creation so
     /// listing never has to load Enclave key handles.
     public let publicKey: Data
@@ -111,7 +114,8 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
                 blockForwarded: Bool = false, approveAll: Bool = false,
                 autoApprove: Bool = false, locked: Bool = false,
                 destinations: [DestinationRecord] = [],
-                branchRules: [BranchRule] = [], publicKey: Data, createdAt: Date) {
+                branchRules: [BranchRule] = [], appRules: [AppRule] = [],
+                publicKey: Data, createdAt: Date) {
         self.name = name
         self.keyDescription = keyDescription
         self.authRequired = authRequired
@@ -121,6 +125,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         self.locked = locked
         self.destinations = destinations
         self.branchRules = branchRules
+        self.appRules = appRules
         self.publicKey = publicKey
         self.createdAt = createdAt
     }

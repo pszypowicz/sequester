@@ -13,7 +13,7 @@ final class KeyStore {
 
     var enclaveAvailable: Bool { EnclaveKeyStore.isEnclaveAvailable }
 
-    private var observer: (any NSObjectProtocol)?
+    @ObservationIgnored nonisolated(unsafe) private var observer: (any NSObjectProtocol)?
 
     init() {
         reload()
@@ -23,6 +23,12 @@ final class KeyStore {
             forName: .sequesterKeysDidChange, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.reload() }
+        }
+    }
+
+    deinit {
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
         }
     }
 
@@ -82,6 +88,16 @@ final class KeyStore {
 
     func setBranchRule(name: String, hops: [BindingHop], state: DestinationState) {
         EnclaveKeyStore.setBranchRule(name: name, hops: hops, state: state)
+        reload()
+    }
+
+    func setAppRule(name: String, identity: String, displayName: String, state: AppState) {
+        _ = try? EnclaveKeyStore.setAppRule(name: name, identity: identity, displayName: displayName, state: state)
+        reload()
+    }
+
+    func removeAppRule(name: String, identity: String) {
+        EnclaveKeyStore.removeAppRule(name: name, identity: identity)
         reload()
     }
 

@@ -21,10 +21,14 @@ public struct SessionBinding: Sendable, Hashable {
 /// unchecked conformance.
 public final class AgentSession: @unchecked Sendable {
     public let provenance: Provenance
+    /// Instance id of the responsible process (the terminal/IDE), for scoping
+    /// "allow for this session" grants. Resolved once at connection time.
+    public let responsibleInstanceID: String?
     public var bindings: [SessionBinding] = []
 
     public init(provenance: Provenance) {
         self.provenance = provenance
+        self.responsibleInstanceID = ProvenanceTracer.responsibleInstanceID(forPid: provenance.pid)
     }
 
     public var bindingChain: [BindingHop] {
@@ -42,6 +46,18 @@ public struct ApprovalRequest: Sendable {
     /// Whether "don't ask again" is offered; false for unbound requests,
     /// which have no destination to remember.
     public let canRemember: Bool
+    /// The requesting app's current standing, so the dialog can show whether
+    /// an authorization decision is being asked for.
+    public let appStanding: AppStanding
+
+    public init(keyName: String, provenance: Provenance, bindingChain: [BindingHop],
+                canRemember: Bool, appStanding: AppStanding) {
+        self.keyName = keyName
+        self.provenance = provenance
+        self.bindingChain = bindingChain
+        self.canRemember = canRemember
+        self.appStanding = appStanding
+    }
 }
 
 public struct ApprovalDecision: Sendable {
@@ -51,11 +67,15 @@ public struct ApprovalDecision: Sendable {
     public var remember: Bool
     /// A name the user gave the destination host while answering.
     public var destinationName: String?
+    /// What to remember about the requesting app beyond this signature.
+    public var appScope: AppScope
 
-    public init(allowed: Bool, remember: Bool = false, destinationName: String? = nil) {
+    public init(allowed: Bool, remember: Bool = false, destinationName: String? = nil,
+                appScope: AppScope = .once) {
         self.allowed = allowed
         self.remember = remember
         self.destinationName = destinationName
+        self.appScope = appScope
     }
 
     public static let deny = ApprovalDecision(allowed: false)
@@ -140,7 +160,9 @@ public struct Agent: Sendable {
         }
 
         let bindingChain = session.bindingChain
-        var decision = PolicyEngine.evaluate(key: key, bindingChain: bindingChain)
+        let appStanding = resolveAppStanding(key: key, session: session)
+        var decision = PolicyEngine.evaluate(key: key, bindingChain: bindingChain,
+                                             appStanding: appStanding, trust: session.provenance.trust)
         // A silent allow is only trustworthy when the signature is tied to
         // the destination that was actually bound. Without that tie a
         // verified binding for one session could be reused to authorize a
@@ -160,7 +182,7 @@ public struct Agent: Sendable {
                 Log.agent.log("Refused signature for \(destination.fingerprint, privacy: .public) with \(key.name, privacy: .public); denied by policy, not added to destinations")
             }
         }
-        Log.agent.log("Sign request: key \(key.name, privacy: .public), requester \(session.provenance.displayName, privacy: .public) (pid \(session.provenance.pid, privacy: .public)), chain \(DestinationRecord.bindingChainID(bindingChain), privacy: .public), decision \(String(describing: decision), privacy: .public)")
+        Log.agent.log("Sign request: key \(key.name, privacy: .public), requester \(session.provenance.displayName, privacy: .public) (pid \(session.provenance.pid, privacy: .public)), trust \(String(describing: session.provenance.trust), privacy: .public), app \(String(describing: appStanding), privacy: .public), chain \(DestinationRecord.bindingChainID(bindingChain), privacy: .public), decision \(String(describing: decision), privacy: .public)")
 
         switch decision {
         case .deny:
@@ -168,16 +190,20 @@ public struct Agent: Sendable {
         case .allow:
             break
         case .ask:
-            // For Touch ID keys the Enclave prompt is the ask; the reason
-            // string carries the request context. Other keys get the app
-            // dialog.
-            if !key.authRequired {
+            // Non-Touch-ID keys always show the app dialog. Touch ID keys show
+            // it only when an app-authorization decision is needed (an unknown
+            // app), since the Enclave prompt cannot capture allow/block; once
+            // the app is authorized they go straight to the Enclave prompt,
+            // which carries the request context in its reason string.
+            if !key.authRequired || appStanding == .unknown {
                 let approval = await approver.approve(ApprovalRequest(
                     keyName: key.name,
                     provenance: session.provenance,
                     bindingChain: bindingChain,
-                    canRemember: !bindingChain.isEmpty
+                    canRemember: !bindingChain.isEmpty && !key.authRequired,
+                    appStanding: appStanding
                 ))
+                applyAppDecision(approval.appScope, session: session)
                 if let destination = bindingChain.last, let name = approval.destinationName {
                     HostNames.shared.setName(name, for: destination.fingerprint)
                 }
@@ -228,14 +254,59 @@ public struct Agent: Sendable {
         return signedSessionID == destination.sessionID
     }
 
+    /// Resolves the requesting app's effective standing from the per-key
+    /// override, the global authorization store, and the in-memory session
+    /// grants.
+    private func resolveAppStanding(key: KeyMetadata, session: AgentSession) -> AppStanding {
+        AppPolicy.standing(
+            identityKey: session.provenance.identityKey,
+            instance: session.responsibleInstanceID,
+            perKeyRules: key.appRules,
+            globalLookup: { AppAuthorizationStore.state(for: $0) },
+            sessionAllowed: { AppSessionGrants.shared.isAllowed(identity: $0, instance: $1) },
+            sessionBlocked: { AppSessionGrants.shared.isBlocked(instance: $0) }
+        )
+    }
+
+    /// Persists what the user chose to remember about the requesting app.
+    /// A permanent allow or block needs a verified identity; an unverified
+    /// peer can only be blocked for the session.
+    private func applyAppDecision(_ scope: AppScope, session: AgentSession) {
+        let provenance = session.provenance
+        switch scope {
+        case .once:
+            break
+        case .session:
+            if let identity = provenance.identityKey, let instance = session.responsibleInstanceID {
+                AppSessionGrants.shared.allow(identity: identity, instance: instance)
+            }
+        case .always:
+            if let identity = provenance.identityKey {
+                AppAuthorizationStore.setState(identity: identity, displayName: provenance.displayName,
+                                               state: .allowed, now: Date())
+            }
+        case .block:
+            if let identity = provenance.identityKey {
+                AppAuthorizationStore.setState(identity: identity, displayName: provenance.displayName,
+                                               state: .blocked, now: Date())
+            } else if let instance = session.responsibleInstanceID {
+                AppSessionGrants.shared.block(instance: instance)
+            }
+        }
+    }
+
     private func signReason(key: KeyMetadata, session: AgentSession, bindingChain: [BindingHop]) -> String {
-        var reason = "sign an SSH request from \(session.provenance.displayName) with key \"\(key.name)\""
+        var reason = "sign an SSH request with key \"\(key.name)\""
         if let destination = bindingChain.last {
             reason += " for \(HostNames.shared.label(for: destination.fingerprint))"
         }
         if bindingChain.contains(where: { $0.forwarding }) {
             reason += " (FORWARDED)"
         }
+        // The requester name is attacker-controlled, so it comes last, after
+        // the authoritative key and destination that it must not be able to
+        // forge, and it is sanitized in Provenance.displayName.
+        reason += ", requested by \(session.provenance.displayName)"
         return reason
     }
 

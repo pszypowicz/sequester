@@ -16,6 +16,13 @@ struct ApprovalView: View {
 
     let keyName: String
     let requester: String
+    /// Whether the requesting app has a verified identity, and so can be
+    /// remembered as allowed. Unverified peers can only be allowed once.
+    let verified: Bool
+    /// Whether an app-authorization decision is being asked for (an unknown
+    /// app). When the app is already authorized and the dialog is only about
+    /// the destination, the app controls are hidden.
+    let appDecisionNeeded: Bool
     let hops: [Hop]
     let canName: Bool
     let canRemember: Bool
@@ -23,6 +30,7 @@ struct ApprovalView: View {
 
     @State private var name = ""
     @State private var remember = false
+    @State private var appScope: AppScope = .once
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -59,6 +67,23 @@ struct ApprovalView: View {
                 }
             }
 
+            if appDecisionNeeded {
+                if verified {
+                    Picker("When I allow:", selection: $appScope) {
+                        Text("Just this time").tag(AppScope.once)
+                        Text("For this session").tag(AppScope.session)
+                        Text("Always allow this app").tag(AppScope.always)
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                } else {
+                    Label("Unverified app: it can be allowed only for this one request.",
+                          systemImage: "exclamationmark.shield")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+
             if canName {
                 TextField("Name this host (optional)", text: $name)
                     .textFieldStyle(.roundedBorder)
@@ -74,12 +99,18 @@ struct ApprovalView: View {
             }
 
             HStack {
+                if appDecisionNeeded {
+                    Button("Block App", role: .destructive) {
+                        complete(ApprovalDecision(allowed: false, appScope: .block))
+                    }
+                }
                 Spacer()
                 Button("Deny") {
                     complete(ApprovalDecision(
                         allowed: false,
                         remember: canRemember && remember,
-                        destinationName: name.isEmpty ? nil : name
+                        destinationName: name.isEmpty ? nil : name,
+                        appScope: .once
                     ))
                 }
                 .keyboardShortcut(.cancelAction)
@@ -87,7 +118,8 @@ struct ApprovalView: View {
                     complete(ApprovalDecision(
                         allowed: true,
                         remember: canRemember && remember,
-                        destinationName: name.isEmpty ? nil : name
+                        destinationName: name.isEmpty ? nil : name,
+                        appScope: (appDecisionNeeded && verified) ? appScope : .once
                     ))
                 }
                 .keyboardShortcut(.defaultAction)
@@ -124,6 +156,8 @@ struct ApprovalView: View {
                 }
                 Text(role)
                     .font(.caption2)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
                     .foregroundStyle(role == "forwarding hop" ? .orange : .secondary)
             }
             .padding(.bottom, last ? 0 : 8)

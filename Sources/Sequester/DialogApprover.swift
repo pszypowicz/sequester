@@ -41,6 +41,8 @@ struct DialogApprover: SigningApprover {
         let view = ApprovalView(
             keyName: request.keyName,
             requester: "\(request.provenance.displayName) (pid \(request.provenance.pid))",
+            verified: request.provenance.identityKey != nil,
+            appDecisionNeeded: request.appStanding == .unknown,
             hops: hops,
             canName: !request.bindingChain.isEmpty,
             canRemember: request.canRemember
