@@ -26,7 +26,7 @@ struct KeyDetailView: View {
                 LabeledContent("Touch ID", value: key.authRequired ? "Required for every signature" : "Not required")
                 Toggle("Block forwarded requests", isOn: blockForwardedBinding)
                 if !key.authRequired {
-                    Toggle("Approve everything by default", isOn: autoApproveBinding)
+                    Toggle("Approve local requests without asking", isOn: autoApproveBinding)
                 }
             } header: {
                 Text("Approval")
@@ -93,7 +93,7 @@ struct KeyDetailView: View {
         if key.authRequired {
             "Touch ID is enforced by the Secure Enclave and cannot be bypassed or replaced by Sequester. Blocked destinations and blocked forwarded requests are denied before any prompt appears."
         } else if key.autoApprove {
-            "This key signs for anything that is not blocked, with no dialog and no naming prompt. Blocked destinations and blocked forwarded requests are still denied."
+            "This key signs local (non-forwarded) requests with no dialog and no naming prompt. Forwarded requests still ask, and blocked destinations are always denied."
         } else {
             "Sequester asks before each signature unless the destination is approved. Blocked destinations and blocked forwarded requests are denied without asking."
         }

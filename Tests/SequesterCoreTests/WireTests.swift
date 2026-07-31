@@ -126,25 +126,51 @@ import CryptoKit
         #expect(response == Data([5]))
     }
 
-    @Test func sessionBindRecordsAndSucceeds() async throws {
-        let agent = Agent(approver: DenyAll())
-        let session = makeSession()
-
+    private func sessionBindMessage(hostKey: Curve25519.Signing.PrivateKey, sessionID: Data,
+                                    signature: Data, forwarding: Bool) -> Data {
+        var hostKeyBlob = SSHWire.lengthPrefixed("ssh-ed25519")
+        hostKeyBlob.append(SSHWire.lengthPrefixed(hostKey.publicKey.rawRepresentation))
+        var sigBlob = SSHWire.lengthPrefixed("ssh-ed25519")
+        sigBlob.append(SSHWire.lengthPrefixed(signature))
         var payload = Data([27])
         payload.append(SSHWire.lengthPrefixed("session-bind@openssh.com"))
-        payload.append(SSHWire.lengthPrefixed(SSHWire.lengthPrefixed("ssh-ed25519")))
-        payload.append(SSHWire.lengthPrefixed(Data("sessionid".utf8)))
-        payload.append(SSHWire.lengthPrefixed(Data("signature".utf8)))
-        payload.append(Data([1]))
+        payload.append(SSHWire.lengthPrefixed(hostKeyBlob))
+        payload.append(SSHWire.lengthPrefixed(sessionID))
+        payload.append(SSHWire.lengthPrefixed(sigBlob))
+        payload.append(Data([forwarding ? 1 : 0]))
+        return payload
+    }
 
-        let response = await agent.handle(message: payload, session: session)
+    @Test func validSessionBindRecordsAndSucceeds() async throws {
+        let agent = Agent(approver: DenyAll())
+        let session = makeSession()
+        let hostKey = Curve25519.Signing.PrivateKey()
+        let sessionID = Data((0..<32).map { UInt8($0) })
+        let signature = try hostKey.signature(for: sessionID)
+
+        let response = await agent.handle(
+            message: sessionBindMessage(hostKey: hostKey, sessionID: sessionID, signature: signature, forwarding: true),
+            session: session
+        )
         #expect(response == Data([6]))
         #expect(session.bindings.count == 1)
         #expect(session.bindings[0].isForwarding)
         #expect(session.bindings[0].hostKeyAlgorithm == "ssh-ed25519")
-        #expect(session.chain == [SessionBinding](session.bindings).map {
-            ChainHop(fingerprint: $0.hostKeyFingerprint, algorithm: $0.hostKeyAlgorithm, forwarding: $0.isForwarding)
-        })
+        #expect(session.bindings[0].sessionID == sessionID)
+    }
+
+    @Test func forgedSessionBindRejected() async throws {
+        let agent = Agent(approver: DenyAll())
+        let session = makeSession()
+        let hostKey = Curve25519.Signing.PrivateKey()
+        let sessionID = Data((0..<32).map { _ in UInt8(7) })
+        // A signature over different data (or here, junk) must not verify.
+        let response = await agent.handle(
+            message: sessionBindMessage(hostKey: hostKey, sessionID: sessionID, signature: Data(count: 64), forwarding: false),
+            session: session
+        )
+        #expect(response == Data([5]))
+        #expect(session.bindings.isEmpty)
     }
 
     @Test func unsupportedExtensionFails() async {
@@ -287,18 +313,21 @@ import CryptoKit
         #expect(PolicyEngine.evaluate(key: key, chain: [vm2, github]) == .allow)
     }
 
-    @Test func autoApproveAllowsAnythingUnblocked() {
+    @Test func autoApproveIsLocalOnly() {
         let key = makeKey(autoApprove: true)
-        #expect(PolicyEngine.evaluate(key: key, chain: [vm1, github]) == .allow)
-        #expect(PolicyEngine.evaluate(key: key, chain: []) == .allow)
+        // Local (no forwarding) signs silently.
+        #expect(PolicyEngine.evaluate(key: key, chain: [github]) == .allow)
+        // Forwarded still asks, and an unbound request still asks.
+        #expect(PolicyEngine.evaluate(key: key, chain: [vm1, github]) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, chain: []) == .ask)
     }
 
     @Test func autoApproveYieldsToBlocks() {
-        let blockedLeaf = makeKey(destinations: [record([vm1, github], .blocked)], autoApprove: true)
-        #expect(PolicyEngine.evaluate(key: blockedLeaf, chain: [vm1, github]) == .deny)
+        let blockedLeaf = makeKey(destinations: [record([github], .blocked)], autoApprove: true)
+        #expect(PolicyEngine.evaluate(key: blockedLeaf, chain: [github]) == .deny)
 
-        let blockedBranch = makeKey(rules: [BranchRule(hops: [vm1], state: .blocked)], autoApprove: true)
-        #expect(PolicyEngine.evaluate(key: blockedBranch, chain: [vm1, github]) == .deny)
+        let blockedBranch = makeKey(rules: [BranchRule(hops: [github], state: .blocked)], autoApprove: true)
+        #expect(PolicyEngine.evaluate(key: blockedBranch, chain: [github]) == .deny)
 
         let noForwarding = makeKey(autoApprove: true, blockForwarded: true)
         #expect(PolicyEngine.evaluate(key: noForwarding, chain: [vm1, github]) == .deny)
@@ -328,5 +357,54 @@ import CryptoKit
         decoder.dateDecodingStrategy = .secondsSince1970
         let metadata = try decoder.decode(KeyMetadata.self, from: Data(legacy.utf8))
         #expect(metadata.branchRules.isEmpty)
+    }
+}
+
+@Suite struct HostKeyVerifierTests {
+
+    @Test func ed25519RoundTrip() throws {
+        let key = Curve25519.Signing.PrivateKey()
+        let message = Data("session-identifier".utf8)
+        let signature = try key.signature(for: message)
+        var hostKey = SSHWire.lengthPrefixed("ssh-ed25519")
+        hostKey.append(SSHWire.lengthPrefixed(key.publicKey.rawRepresentation))
+        var sigBlob = SSHWire.lengthPrefixed("ssh-ed25519")
+        sigBlob.append(SSHWire.lengthPrefixed(signature))
+
+        #expect(HostKeyVerifier.verify(hostKey: hostKey, signature: sigBlob, over: message))
+        #expect(!HostKeyVerifier.verify(hostKey: hostKey, signature: sigBlob, over: Data("other".utf8)))
+    }
+
+    @Test func ecdsaP256RoundTrip() throws {
+        let key = P256.Signing.PrivateKey()
+        let message = Data("session-identifier".utf8)
+        let signature = try key.signature(for: message)
+        var hostKey = SSHWire.lengthPrefixed("ecdsa-sha2-nistp256")
+        hostKey.append(SSHWire.lengthPrefixed("nistp256"))
+        hostKey.append(SSHWire.lengthPrefixed(key.publicKey.x963Representation))
+
+        let raw = signature.rawRepresentation
+        let r = SSHWire.mpint(fixedWidthPositive: Data(raw.prefix(32)))
+        let s = SSHWire.mpint(fixedWidthPositive: Data(raw.suffix(32)))
+        var inner = SSHWire.lengthPrefixed(r)
+        inner.append(SSHWire.lengthPrefixed(s))
+        var sigBlob = SSHWire.lengthPrefixed("ecdsa-sha2-nistp256")
+        sigBlob.append(SSHWire.lengthPrefixed(inner))
+
+        #expect(HostKeyVerifier.verify(hostKey: hostKey, signature: sigBlob, over: message))
+        #expect(!HostKeyVerifier.verify(hostKey: hostKey, signature: sigBlob, over: Data("tampered".utf8)))
+    }
+
+    @Test func wrongKeyFails() throws {
+        let signer = Curve25519.Signing.PrivateKey()
+        let impostor = Curve25519.Signing.PrivateKey()
+        let message = Data("session".utf8)
+        let signature = try signer.signature(for: message)
+        var hostKey = SSHWire.lengthPrefixed("ssh-ed25519")
+        hostKey.append(SSHWire.lengthPrefixed(impostor.publicKey.rawRepresentation))
+        var sigBlob = SSHWire.lengthPrefixed("ssh-ed25519")
+        sigBlob.append(SSHWire.lengthPrefixed(signature))
+
+        #expect(!HostKeyVerifier.verify(hostKey: hostKey, signature: sigBlob, over: message))
     }
 }

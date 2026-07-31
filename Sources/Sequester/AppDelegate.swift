@@ -1,4 +1,5 @@
 import AppKit
+import UserNotifications
 import SequesterCore
 
 @MainActor
@@ -8,8 +9,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.app.log("Sequester launched, login item \(LoginItem.isEnabled, privacy: .public)")
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
+            if let error {
+                Log.app.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
+            } else {
+                Log.app.log("Notification authorization granted \(granted, privacy: .public)")
+            }
+        }
         EnclaveKeyStore.syncPublicKeyFiles()
-        let agent = Agent(approver: DialogApprover())
+        let agent = Agent(approver: DialogApprover(), notifier: NotificationNotifier())
         let server = AgentServer(socketPath: SequesterPaths.socketURL.path, agent: agent)
         do {
             try server.start()

@@ -1,14 +1,19 @@
 import Foundation
 import OSLog
 
-/// One session-bind@openssh.com record received on a connection. OpenSSH
-/// 8.9+ clients bind every agent connection to the SSH session it serves,
-/// flagging connections opened on behalf of a forwarded agent. A forwarded
-/// connection accumulates one binding per hop.
+/// One verified session-bind@openssh.com record. OpenSSH 8.9+ clients bind
+/// every agent connection to the SSH session it serves, flagging
+/// connections opened on behalf of a forwarded agent. A forwarded
+/// connection accumulates one binding per hop. Only bindings whose
+/// signature verified against the host key are ever stored.
 public struct SessionBinding: Sendable, Hashable {
     public let hostKeyAlgorithm: String
     public let hostKeyFingerprint: String
     public let isForwarding: Bool
+    /// The session identifier the binding is for; a signature is only
+    /// issued silently when the request's own session identifier matches
+    /// the destination binding.
+    public let sessionID: Data
 }
 
 /// Per-connection state. A connection's messages are handled strictly
@@ -62,6 +67,14 @@ public protocol SigningApprover: Sendable {
     func approve(_ request: ApprovalRequest) async -> ApprovalDecision
 }
 
+/// Notified after every successful signature so unexpected use surfaces.
+/// `silent` is true when the signature happened with no user interaction
+/// at all (no dialog and no Touch ID prompt), which is the case worth
+/// noticing.
+public protocol SigningNotifier: Sendable {
+    func signed(keyName: String, chain: [ChainHop], silent: Bool)
+}
+
 /// The SSH agent protocol handler: parses one client message, produces one
 /// response. Only the read-side of the protocol is implemented; add/remove
 /// operations are the app's job, so ssh-add mutations report failure.
@@ -81,9 +94,11 @@ public struct Agent: Sendable {
     }
 
     private let approver: any SigningApprover
+    private let notifier: (any SigningNotifier)?
 
-    public init(approver: any SigningApprover) {
+    public init(approver: any SigningApprover, notifier: (any SigningNotifier)? = nil) {
         self.approver = approver
+        self.notifier = notifier
     }
 
     public func handle(message: Data, session: AgentSession) async -> Data {
@@ -129,7 +144,15 @@ public struct Agent: Sendable {
             EnclaveKeyStore.recordObservation(name: key.name, hops: chain)
         }
 
-        let decision = PolicyEngine.evaluate(key: key, chain: chain)
+        var decision = PolicyEngine.evaluate(key: key, chain: chain)
+        // A silent allow is only trustworthy when the signature is tied to
+        // the destination that was actually bound. Without that tie a
+        // verified binding for one session could be reused to authorize a
+        // signature for another, so downgrade to asking.
+        if decision == .allow && !destinationBound(session: session, dataToSign: dataToSign) {
+            Log.agent.log("Downgrading allow to ask for \(key.name, privacy: .public): request not bound to the destination session")
+            decision = .ask
+        }
         Log.agent.log("Sign request: key \(key.name, privacy: .public), requester \(session.provenance.displayName, privacy: .public) (pid \(session.provenance.pid, privacy: .public)), chain \(DestinationRecord.chainID(chain), privacy: .public), decision \(String(describing: decision), privacy: .public)")
 
         switch decision {
@@ -168,6 +191,8 @@ public struct Agent: Sendable {
                 reason: signReason(key: key, session: session, chain: chain)
             )
             Log.agent.log("Signed with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
+            let silent = decision == .allow && !key.authRequired
+            notifier?.signed(keyName: key.name, chain: chain, silent: silent)
             var payload = Data([Response.signResponse])
             payload.append(SSHWire.lengthPrefixed(OpenSSH.p256SignatureBlob(rawSignature: raw)))
             return payload
@@ -177,6 +202,16 @@ public struct Agent: Sendable {
             Log.agent.error("Signing with \(key.name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             return Response.failure
         }
+    }
+
+    /// The signed userauth blob begins with the session identifier. A
+    /// silent signature requires it to match the destination binding, so a
+    /// binding captured for one session cannot authorize another.
+    private func destinationBound(session: AgentSession, dataToSign: Data) -> Bool {
+        guard let destination = session.bindings.last else { return false }
+        var reader = SSHWireReader(dataToSign)
+        guard let signedSessionID = try? reader.readString() else { return false }
+        return signedSessionID == destination.sessionID
     }
 
     private func signReason(key: KeyMetadata, session: AgentSession, chain: [ChainHop]) -> String {
@@ -190,8 +225,10 @@ public struct Agent: Sendable {
         return reason
     }
 
-    /// Records the binding the client reports; the policy layer fails safe,
-    /// so any forwarded or unknown path asks before signing.
+    /// Records the binding only if its signature verifies against the host
+    /// key. A forged binding (a host key the sender does not control)
+    /// fails verification and is rejected, so it never enters the chain the
+    /// policy sees.
     private func handleExtension(reader: inout SSHWireReader, session: AgentSession) -> Data {
         guard let name = try? reader.readUTF8String() else { return Response.failure }
         guard name == "session-bind@openssh.com" else {
@@ -199,15 +236,21 @@ public struct Agent: Sendable {
             return Response.failure
         }
         guard let hostKeyBlob = try? reader.readString(),
-              let _ = try? reader.readString(),  // session identifier
-              let _ = try? reader.readString(),  // signature over the session identifier
+              let sessionID = try? reader.readString(),
+              let signature = try? reader.readString(),
               let forwardingByte = try? reader.readByte() else {
+            return Response.failure
+        }
+        let fingerprint = OpenSSH.fingerprintSHA256(blob: hostKeyBlob)
+        guard HostKeyVerifier.verify(hostKey: hostKeyBlob, signature: signature, over: sessionID) else {
+            Log.agent.log("Rejected session-bind with an invalid signature for \(fingerprint, privacy: .public), requester \(session.provenance.displayName, privacy: .public)")
             return Response.failure
         }
         let binding = SessionBinding(
             hostKeyAlgorithm: OpenSSH.blobAlgorithm(hostKeyBlob) ?? "unknown",
-            hostKeyFingerprint: OpenSSH.fingerprintSHA256(blob: hostKeyBlob),
-            isForwarding: forwardingByte != 0
+            hostKeyFingerprint: fingerprint,
+            isForwarding: forwardingByte != 0,
+            sessionID: sessionID
         )
         session.bindings.append(binding)
         Log.agent.log("Session bound to \(binding.hostKeyFingerprint, privacy: .public) (\(binding.hostKeyAlgorithm, privacy: .public)), forwarding \(binding.isForwarding, privacy: .public), requester \(session.provenance.displayName, privacy: .public)")

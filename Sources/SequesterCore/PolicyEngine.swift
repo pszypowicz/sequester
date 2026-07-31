@@ -16,7 +16,7 @@ public enum SigningDecision: Equatable, Sendable {
 ///
 /// A block anywhere on the path wins; otherwise the most specific standing
 /// applies, where the exact chain beats a branch rule; anything still
-/// undecided asks, unless the key approves everything by default.
+/// undecided asks, unless the key auto-approves local (non-forwarded) use.
 public enum PolicyEngine {
 
     public static func evaluate(key: KeyMetadata, chain: [ChainHop]) -> SigningDecision {
@@ -37,6 +37,9 @@ public enum PolicyEngine {
         if branchRules.contains(where: { $0.state == .approved }) {
             return .allow
         }
-        return key.autoApprove ? .allow : .ask
+        if key.autoApprove && !chain.isEmpty && !chain.contains(where: { $0.forwarding }) {
+            return .allow
+        }
+        return .ask
     }
 }

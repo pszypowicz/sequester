@@ -37,12 +37,14 @@ Every signature request needs confirmation by default. For keys with the Touch I
 Each key records the destinations it is asked to sign for, keyed by the exact binding chain of the connection: "github reached locally", "github reached through vm1", and "github reached through vm2" are three separate records. Each record has a standing you can set on the key's page:
 
 - **Neutral** (default): ask before signing.
-- **Approved**: sign without asking. Offered as a "don't ask again for this destination" checkbox in the approval dialog, and only for keys without the Touch ID requirement, since the Enclave prompts regardless. Approval covers exactly the observed path, so trusting github locally says nothing about forwarded use, and trusting it through vm1 says nothing about vm2.
+- **Approved**: sign without asking. Offered as a "don't ask again for this destination" checkbox in the approval dialog, and only for keys without the Touch ID requirement, since the Enclave prompts regardless. Approval covers exactly the observed path, so trusting github locally says nothing about forwarded use, and trusting it through vm1 says nothing about vm2. A standing set on a hop covers every path through it, so a whole branch can be governed at once.
 - **Blocked**: deny without any prompt, including the Touch ID prompt. Useful for silencing noise and for defeating prompt-fatigue attacks from a compromised host.
 
-A per-key **block forwarded requests** toggle denies everything arriving through a forwarded agent connection outright, taking precedence over approved records.
+A per-key **block forwarded requests** toggle denies everything arriving through a forwarded agent connection outright, taking precedence over approved records. A per-key **approve local requests** toggle (keys without Touch ID only) signs non-forwarded requests without a dialog; forwarded requests still ask, and blocks always win.
 
-Path detection uses the `session-bind@openssh.com` extension that OpenSSH 8.9 and later sends on every agent connection, one binding per hop. The agent records what the client reports and fails safe: unknown and unbound paths always ask. The binding signatures are not yet cryptographically verified, so approved records currently express the same trust the dialog itself does; verification hardening comes next.
+Path detection uses the `session-bind@openssh.com` extension that OpenSSH 8.9 and later sends on every agent connection, one binding per hop. Each binding's signature is verified against the destination host key, and a silent signature additionally requires the request's own session identifier to match the destination binding, so an intermediate host cannot forge a downstream hop or reuse a binding to authorize a different session. Unknown and unbound paths always ask.
+
+Every signature posts a notification identifying the key and destination, worded to stand out when the signature happened with no prompt at all, so unexpected use is visible.
 
 ## Setup
 
@@ -64,6 +66,7 @@ Host myserver
 - The Touch ID requirement is enforced by the Enclave's access control, independently of any app-level dialog.
 - Approval dialogs are an app-level policy layer on top. They are enforced for every signature the agent performs, but a local process running as your user could talk to the Enclave-backed keychain items with its own code if it were signed appropriately, so the dialogs are a usability and forwarding defense rather than a hardware boundary.
 - The app runs in the App Sandbox with no network entitlement: its file access is confined to the container, and a compromised agent process has no way to phone home.
+- Session bindings are cryptographically verified, so a compromised forwarding host cannot fabricate a downstream destination to reach a silent approval. It can still make genuine onward connections with a forwarded key it holds, which no agent can prevent; that is a reason to prefer not forwarding into untrusted hosts.
 - Key handles and metadata are stored in the login keychain.
 
 ## Building
@@ -77,7 +80,7 @@ make dev        # build and (re)launch
 make test       # unit tests
 ```
 
-`scripts/bundle.sh --identity adhoc` produces an unsigned local build. `scripts/agent-e2e.py` exercises the running agent end to end over the socket, and the app binary accepts a hidden `--selftest` flag that checks Enclave and keychain access headlessly.
+`scripts/bundle.sh --identity adhoc` produces an unsigned local build. `scripts/build-icon.sh` regenerates `Resources/Sequester.icns` from `scripts/generate-icon.swift`. `scripts/agent-e2e.py` exercises the running agent end to end over the socket, and the app binary accepts a hidden `--selftest` flag that checks Enclave and keychain access headlessly.
 
 ## Debugging
 

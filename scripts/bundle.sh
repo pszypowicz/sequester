@@ -42,6 +42,12 @@ cp .build/release/Sequester "$APP/MacOS/Sequester"
 cp Sources/Sequester/Info.plist "$APP/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Info.plist"
 
+if [[ -f Resources/Sequester.icns ]]; then
+  cp Resources/Sequester.icns "$APP/Resources/Sequester.icns"
+else
+  echo "warning: Resources/Sequester.icns missing; run scripts/build-icon.sh" >&2
+fi
+
 ENTITLEMENTS="Sources/Sequester/Sequester.entitlements"
 
 if [[ "$identity" == "adhoc" ]]; then

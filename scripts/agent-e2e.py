@@ -5,18 +5,19 @@
 # ///
 """End-to-end exercise of the Sequester agent over its Unix socket.
 
-Speaks the SSH agent protocol as a raw client: optionally binds the
-connection with session-bind@openssh.com (with a fabricated host key, which
-the agent records without verifying), lists identities, requests a
-signature with the named key, and verifies the returned ECDSA P-256
+Speaks the SSH agent protocol as a raw client: binds the connection with a
+valid session-bind@openssh.com record (a freshly generated Ed25519 host key
+signing the session id, so it passes the agent's signature verification),
+lists identities, requests a signature with the named key whose signed blob
+begins with that session id, and verifies the returned ECDSA P-256
 signature against the key's public point.
 
 Run with: uv run scripts/agent-e2e.py --key-name <name>
 
-A key created by --selftest-create-key has this script's deterministic
-binding chain pre-approved and no Touch ID requirement, so it signs
-without any UI, which makes this scriptable. Keys without that standing
-pop the app's dialog; expect to interact or time out.
+A key created by --selftest-create-key auto-approves local (non-forwarded)
+use and has no Touch ID requirement, so a valid non-forwarded binding signs
+without any UI, which makes this scriptable. Keys without that standing pop
+the app's dialog; expect to interact or time out.
 """
 
 import argparse
@@ -24,6 +25,8 @@ import os
 import socket
 import struct
 import sys
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 SSH_AGENTC_REQUEST_IDENTITIES = 11
 SSH_AGENT_IDENTITIES_ANSWER = 12
@@ -50,20 +53,26 @@ def roundtrip(sock: socket.socket, payload: bytes) -> bytes:
     return sock.recv(length, socket.MSG_WAITALL)
 
 
-def send_session_bind(sock: socket.socket, forwarding: bool) -> None:
-    host_key = sshstr(b"ssh-ed25519") + sshstr(b"\x00" * 32)
+def send_session_bind(sock: socket.socket, forwarding: bool) -> bytes:
+    """Sends a genuinely signed binding and returns its session id."""
+    host_priv = Ed25519PrivateKey.generate()
+    host_pub = host_priv.public_key().public_bytes_raw()
+    host_key = sshstr(b"ssh-ed25519") + sshstr(host_pub)
+    session_id = os.urandom(32)
+    signature = sshstr(b"ssh-ed25519") + sshstr(host_priv.sign(session_id))
     payload = (
         bytes([SSH_AGENTC_EXTENSION])
         + sshstr(b"session-bind@openssh.com")
         + sshstr(host_key)
-        + sshstr(os.urandom(32))
-        + sshstr(b"fabricated")
+        + sshstr(session_id)
+        + sshstr(signature)
         + bytes([1 if forwarding else 0])
     )
     response = roundtrip(sock, payload)
     if response != bytes([SSH_AGENT_SUCCESS]):
         sys.exit(f"FAIL session-bind: expected SUCCESS, got {response.hex()}")
     print(f"OK session-bind (forwarding={forwarding})")
+    return session_id
 
 
 def find_identity(sock: socket.socket, key_name: str) -> bytes:
@@ -133,12 +142,15 @@ def main() -> None:
     sock.connect(args.socket)
     print(f"OK connected to {args.socket}")
 
+    session_id = b""
     if not args.no_bind:
-        send_session_bind(sock, forwarding=args.forwarded)
+        session_id = send_session_bind(sock, forwarding=args.forwarded)
 
     blob = find_identity(sock, args.key_name)
 
-    message = os.urandom(64)
+    # The signed userauth blob begins with the session id, which the agent
+    # matches against the destination binding before signing silently.
+    message = sshstr(session_id) + os.urandom(32)
     response = roundtrip(
         sock,
         bytes([SSH_AGENTC_SIGN_REQUEST])

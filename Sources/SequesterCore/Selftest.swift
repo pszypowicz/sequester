@@ -116,18 +116,9 @@ public enum Selftest {
             let metadata = try EnclaveKeyStore.create(
                 name: name, description: "created by --selftest-create-key", authRequired: false
             )
-            // Pre-approve the deterministic chain scripts/agent-e2e.py binds
-            // with (an all-zero ssh-ed25519 host key), so the e2e signature
-            // needs no dialog.
-            var hostKeyBlob = SSHWire.lengthPrefixed("ssh-ed25519")
-            hostKeyBlob.append(SSHWire.lengthPrefixed(Data(count: 32)))
-            let hop = ChainHop(
-                fingerprint: OpenSSH.fingerprintSHA256(blob: hostKeyBlob),
-                algorithm: "ssh-ed25519",
-                forwarding: false
-            )
-            EnclaveKeyStore.recordObservation(name: name, hops: [hop])
-            EnclaveKeyStore.setDestinationState(name: name, id: DestinationRecord.chainID([hop]), state: .approved)
+            // Auto-approve local use so a scripted, non-forwarded, verified
+            // connection (scripts/agent-e2e.py) signs without a dialog.
+            try EnclaveKeyStore.setAutoApprove(name: name, enabled: true)
             print("created \(metadata.name) \(metadata.fingerprint)")
             print(metadata.publicKeyFileURL.path)
             return 0
