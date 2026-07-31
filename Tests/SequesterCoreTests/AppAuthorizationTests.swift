@@ -106,4 +106,22 @@ import Foundation
         #expect(PolicyEngine.evaluate(key: key(approved: true), bindingChain: [local]) == .allow)
         #expect(PolicyEngine.evaluate(key: key(), bindingChain: [local]) == .ask)
     }
+
+    @Test func lockedKeyDeniesNewDestinationRegardlessOfApp() {
+        var locked = key()
+        locked.locked = true
+        // A locked key facing an unapproved destination denies; authorizing
+        // the app must not reopen it, so an unknown app is denied, not asked.
+        #expect(PolicyEngine.evaluate(key: locked, bindingChain: [local],
+                                      appStanding: .unknown, trust: .applePlatform) == .deny)
+        #expect(PolicyEngine.evaluate(key: locked, bindingChain: [local],
+                                      appStanding: .allowed, trust: .applePlatform) == .deny)
+        // An already-approved destination on a locked key still verifies the app.
+        var lockedApproved = key(approved: true)
+        lockedApproved.locked = true
+        #expect(PolicyEngine.evaluate(key: lockedApproved, bindingChain: [local],
+                                      appStanding: .unknown, trust: .applePlatform) == .ask)
+        #expect(PolicyEngine.evaluate(key: lockedApproved, bindingChain: [local],
+                                      appStanding: .allowed, trust: .applePlatform) == .allow)
+    }
 }

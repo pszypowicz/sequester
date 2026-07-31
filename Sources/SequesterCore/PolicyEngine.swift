@@ -45,6 +45,17 @@ public enum PolicyEngine {
             return .deny
         }
 
+        // Resolve the destination axis before the app gate. A destination-level
+        // deny - a locked key facing a path it has not already approved - is
+        // absolute: authorizing the app must not reopen it, and a denied
+        // request must not grow the destination list, so it wins over the
+        // app gate's ask.
+        let destination = destinationDecision(key: key, bindingChain: bindingChain,
+                                              record: record, branchRules: branchRules)
+        if destination == .deny {
+            return .deny
+        }
+
         // The app must be authorized before anything signs. An app that has
         // never been seen is asked, so the user can authorize or block it -
         // even for a Touch ID key, whose Enclave prompt cannot capture that
@@ -53,8 +64,6 @@ public enum PolicyEngine {
             return .ask
         }
 
-        let destination = destinationDecision(key: key, bindingChain: bindingChain,
-                                              record: record, branchRules: branchRules)
         // A silent signature requires a verified requester; an unverified peer
         // that would otherwise sign silently is downgraded to asking.
         if trust == .unverified && destination == .allow {
