@@ -66,4 +66,10 @@ else
   codesign --sign "$sign" --force --options runtime --timestamp --entitlements "$ENTITLEMENTS" .build/Sequester.app
 fi
 
+# Register with Launch Services so the app icon resolves in the switcher,
+# login items, and notifications even when run from this build directory
+# (rebuilding replaces the bundle, dropping any prior registration).
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+[[ -x "$LSREGISTER" ]] && "$LSREGISTER" -f "$PWD/.build/Sequester.app" 2>/dev/null || true
+
 echo "Built .build/Sequester.app"
