@@ -40,6 +40,7 @@ struct KeyDetailView: View {
                     settingLabel("Block forwarded requests",
                                  "Denies every request that arrives through a forwarded agent connection, regardless of the destination's standing.")
                 }
+                .disabled(key.approveAll)
                 Toggle(isOn: lockedBinding) {
                     settingLabel("Lock to current destinations",
                                  "Signs only for destinations you have already approved; everything else is denied without asking. Turn off to allow new destinations again.")

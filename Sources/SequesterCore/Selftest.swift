@@ -68,6 +68,17 @@ public enum Selftest {
                 throw KeychainError.corruptItem
             }
         }
+        check("approve-all cascade") {
+            try EnclaveKeyStore.setBlockForwarded(name: temporaryKeyName, blocked: true)
+            try EnclaveKeyStore.setLocked(name: temporaryKeyName, locked: true)
+            try EnclaveKeyStore.setApproveAll(name: temporaryKeyName, enabled: true)
+            let metadata = try KeyStorage.load(name: temporaryKeyName).metadata
+            guard metadata.approveAll, metadata.autoApprove,
+                  !metadata.blockForwarded, !metadata.locked else {
+                throw KeychainError.corruptItem
+            }
+            try EnclaveKeyStore.setApproveAll(name: temporaryKeyName, enabled: false)
+        }
         check("destination tracking") {
             let hop = ChainHop(fingerprint: "SHA256:selftest", algorithm: "ssh-ed25519", forwarding: false)
             EnclaveKeyStore.recordObservation(name: temporaryKeyName, hops: [hop], createIfNew: true)

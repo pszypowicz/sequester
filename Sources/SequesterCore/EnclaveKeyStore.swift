@@ -121,10 +121,18 @@ public enum EnclaveKeyStore {
         return metadata
     }
 
+    /// Enabling approve-all makes it the sole active control: approve-local
+    /// is implied, and the restricting settings (block-forwarded, lock) are
+    /// cleared so nothing contradicts it.
     @discardableResult
     public static func setApproveAll(name: String, enabled: Bool) throws -> KeyMetadata {
         var metadata = try KeyStorage.load(name: name).metadata
         metadata.approveAll = enabled
+        if enabled {
+            metadata.autoApprove = true
+            metadata.blockForwarded = false
+            metadata.locked = false
+        }
         try KeyStorage.updateMetadata(metadata)
         Log.store.log("Set approveAll of \(name, privacy: .public) to \(enabled, privacy: .public)")
         return metadata
