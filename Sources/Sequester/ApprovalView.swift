@@ -51,7 +51,7 @@ struct ApprovalView: View {
                             tint: hop.isDestination ? .accentColor : (hop.forwarded ? .orange : .secondary),
                             title: hop.name ?? "Unnamed host",
                             fingerprint: hop.fingerprint,
-                            role: hop.isDestination ? "destination" : "forwarded hop",
+                            role: hop.isDestination ? "destination host" : "forwarding hop",
                             emphasize: hop.isDestination,
                             last: index == hops.count - 1
                         )
@@ -124,7 +124,7 @@ struct ApprovalView: View {
                 }
                 Text(role)
                     .font(.caption2)
-                    .foregroundStyle(role == "forwarded hop" ? .orange : .secondary)
+                    .foregroundStyle(role == "forwarding hop" ? .orange : .secondary)
             }
             .padding(.bottom, last ? 0 : 8)
             Spacer(minLength: 0)

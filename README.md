@@ -32,19 +32,21 @@ The on-disk `.pub` filename is derived from a hash of the key material, so it is
 
 ## Approval
 
-Every signature request needs confirmation by default. For keys with the Touch ID requirement the Enclave's own prompt is the confirmation, carrying the requesting process and destination in its text; Sequester never stacks a second dialog on top. For other keys Sequester shows an approval dialog naming the requester and the session the request is bound to.
+This is OpenSSH's destination constraints (`ssh-add -h`) made visual and interactive. A key's usage is described by the same vocabulary OpenSSH uses: a **host** is identified by its **host key** (what you see as a fingerprint), a connection is tied to a **session identifier**, and each agent connection is **bound** to its session with a `session-bind@openssh.com` record. The ordered list of those bindings is the **binding chain**, the same thing OpenSSH writes as `vm1>github.com`.
 
-Each key records the destinations it is asked to sign for, keyed by the exact binding chain of the connection: "github reached locally", "github reached through vm1", and "github reached through vm2" are three separate records. Each record has a standing you can set on the key's page:
+The `session-bind` record carries the host key, the session identifier, a signature, and an `is_forwarding` byte. That byte marks whether the connection forwards the agent onward: a **forwarding hop** has `is_forwarding = 1`, and the endpoint the key actually authenticates to (the **destination host**) has `is_forwarding = 0`. So a request's binding chain is a run of forwarding hops ending in a destination host. Sequester shows a chain as "forwarded" when any hop in it forwards.
+
+Each key records the destination hosts it is asked to sign for, keyed by the exact binding chain: github reached directly, github reached through vm1, and github reached through vm2 are three separate records. Each record has a standing you set on the key's page:
 
 - **Neutral** (default): ask before signing.
-- **Approved**: sign without asking. Offered as a "don't ask again for this destination" checkbox in the approval dialog, and only for keys without the Touch ID requirement, since the Enclave prompts regardless. Approval covers exactly the observed path, so trusting github locally says nothing about forwarded use, and trusting it through vm1 says nothing about vm2. A standing set on a hop covers every path through it, so a whole branch can be governed at once.
+- **Approved**: sign without asking. Offered as a "don't ask again for this destination" checkbox in the approval dialog, and only for keys without the Touch ID requirement, since the Enclave prompts regardless. Approval covers exactly the observed chain, so trusting github directly says nothing about forwarded use, and trusting it through vm1 says nothing about vm2. A standing set on a hop covers every chain through it, so a whole branch is governed at once.
 - **Blocked**: deny without any prompt, including the Touch ID prompt. Useful for silencing noise and for defeating prompt-fatigue attacks from a compromised host.
 
-A per-key **block forwarded requests** toggle denies everything arriving through a forwarded agent connection outright, taking precedence over approved records. A per-key **approve local requests** toggle (keys without Touch ID only) signs non-forwarded requests without a dialog; forwarded requests still ask, and blocks always win.
+Per-key settings shape the defaults for chains without an explicit standing. **Approve all requests without asking** signs everything except blocked destinations. **Approve local requests without asking** signs only non-forwarded chains. **Block forwarded requests** denies anything that arrives through a forwarding hop. **Lock to current destinations** signs only for destinations already approved and denies everything else without asking, so a key can be finalized to exactly the hosts it is for. These are offered where they make sense (the approve settings only for keys without Touch ID, since the Enclave prompt cannot be skipped), and blocks always win over approvals.
 
-Path detection uses the `session-bind@openssh.com` extension that OpenSSH 8.9 and later sends on every agent connection, one binding per hop. Each binding's signature is verified against the destination host key, and a silent signature additionally requires the request's own session identifier to match the destination binding, so an intermediate host cannot forge a downstream hop or reuse a binding to authorize a different session. Unknown and unbound paths always ask.
+Each binding's signature is verified against its host key, and a silent signature additionally requires the request's own session identifier to match the destination binding, so an intermediate host cannot forge a downstream hop or reuse a binding captured for one session to authorize another. Unknown and unbound chains always ask, and a denied request for a host the key has never signed for is logged rather than added to the destinations, so a probe cannot grow the list.
 
-Every signature posts a notification identifying the key and destination, worded to stand out when the signature happened with no prompt at all, so unexpected use is visible.
+Every signature posts a notification identifying the key and destination host, worded to stand out when the signature happened with no prompt at all, so unexpected use is visible.
 
 ## Setup
 

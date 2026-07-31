@@ -65,7 +65,7 @@ struct KeyDetailView: View {
                 if key.destinations.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("No usage yet")
-                        Text("Destinations appear here as the key gets used, each one the exact path a request took, with forwarding hops as branches.")
+                        Text("Destination hosts appear here as the key gets used, each one the binding chain a request took, with forwarding hops as branches.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -93,7 +93,7 @@ struct KeyDetailView: View {
             } header: {
                 Text("Destinations")
             } footer: {
-                Text("Forwarding hops branch; the last hop is the destination reached. A standing on a hop covers every path through it. A block anywhere on the path wins; otherwise the most specific standing applies.")
+                Text("Each row is a binding chain: forwarding hops branch, and the last host key is the destination host reached. A standing on a hop covers every chain through it. A block anywhere on the chain wins; otherwise the most specific standing applies.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
