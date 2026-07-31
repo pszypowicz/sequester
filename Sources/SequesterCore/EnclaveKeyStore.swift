@@ -153,6 +153,19 @@ public enum EnclaveKeyStore {
         Log.store.log("Removed destination \(id, privacy: .public) of \(name, privacy: .public)")
     }
 
+    /// Sets the standing for every path starting with these hops. A
+    /// neutral state drops the rule, since neutral is the default.
+    public static func setBranchRule(name: String, hops: [ChainHop], state: DestinationState) {
+        guard !hops.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return }
+        let rule = BranchRule(hops: hops, state: state)
+        metadata.branchRules.removeAll { $0.id == rule.id }
+        if state != .neutral {
+            metadata.branchRules.append(rule)
+        }
+        try? KeyStorage.updateMetadata(metadata)
+        Log.store.log("Set branch \(rule.id, privacy: .public) of \(name, privacy: .public) to \(state.rawValue, privacy: .public)")
+    }
+
     public static func delete(name: String) throws {
         let metadata = try KeyStorage.load(name: name).metadata
         try KeyStorage.delete(name: name)

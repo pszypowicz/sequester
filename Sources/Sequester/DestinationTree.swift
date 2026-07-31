@@ -12,6 +12,9 @@ struct DestinationTree {
         let id: String
         let fingerprint: String
         let algorithm: String
+        /// The chain from the root down to and including this node, which
+        /// is the prefix a branch rule on this node applies to.
+        let hops: [ChainHop]
         var record: DestinationRecord?
         var children: [Node]
         var latestActivity: Date
@@ -20,28 +23,29 @@ struct DestinationTree {
     static func build(_ records: [DestinationRecord]) -> [Node] {
         var roots: [Node] = []
         for record in records {
-            insert(record, hops: record.hops[...], into: &roots, path: "")
+            insert(record, remaining: record.hops[...], prefix: [], into: &roots)
         }
         sort(&roots)
         return roots
     }
 
-    private static func insert(_ record: DestinationRecord, hops: ArraySlice<ChainHop>,
-                               into nodes: inout [Node], path: String) {
-        guard let hop = hops.first else { return }
-        let id = "\(path)/\(hop.fingerprint)"
+    private static func insert(_ record: DestinationRecord, remaining: ArraySlice<ChainHop>,
+                               prefix: [ChainHop], into nodes: inout [Node]) {
+        guard let hop = remaining.first else { return }
+        let hops = prefix + [hop]
         let index = nodes.firstIndex { $0.fingerprint == hop.fingerprint } ?? {
             nodes.append(Node(
-                id: id, fingerprint: hop.fingerprint, algorithm: hop.algorithm,
+                id: DestinationRecord.chainID(hops),
+                fingerprint: hop.fingerprint, algorithm: hop.algorithm, hops: hops,
                 record: nil, children: [], latestActivity: .distantPast
             ))
             return nodes.count - 1
         }()
         nodes[index].latestActivity = max(nodes[index].latestActivity, record.lastUsed)
-        if hops.count == 1 {
+        if remaining.count == 1 {
             nodes[index].record = record
         } else {
-            insert(record, hops: hops.dropFirst(), into: &nodes[index].children, path: id)
+            insert(record, remaining: remaining.dropFirst(), prefix: hops, into: &nodes[index].children)
         }
     }
 

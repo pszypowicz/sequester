@@ -16,17 +16,32 @@ struct DialogApprover: SigningApprover {
             alert.informativeText = Self.details(request)
             alert.addButton(withTitle: "Allow")
             alert.addButton(withTitle: "Deny")
+
+            // Naming the destination while answering is the moment the user
+            // knows what it is, so the field is offered here rather than
+            // only in settings.
+            let destination = request.chain.last
+            let unnamed = destination.map { HostNames.shared.name(for: $0.fingerprint) == nil } ?? false
+            var nameField: NSTextField?
+            if unnamed {
+                let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+                field.placeholderString = "Name this host (optional), e.g. github"
+                alert.accessoryView = field
+                nameField = field
+            }
             if request.canRemember {
                 alert.showsSuppressionButton = true
                 alert.suppressionButton?.title = "Don't ask again for this destination"
             }
+
             guard alert.runModal() == .alertFirstButtonReturn else { return .deny }
-            if request.canRemember, alert.suppressionButton?.state == .on {
-                return .allowAndRemember
-            }
-            return .allow
+            return ApprovalDecision(
+                allowed: true,
+                remember: request.canRemember && alert.suppressionButton?.state == .on,
+                destinationName: nameField?.stringValue
+            )
         }
-        Log.app.log("Approval dialog result for \(request.keyName, privacy: .public): \(String(describing: decision), privacy: .public)")
+        Log.app.log("Approval dialog result for \(request.keyName, privacy: .public): allowed \(decision.allowed, privacy: .public), remember \(decision.remember, privacy: .public)")
         return decision
     }
 
@@ -37,7 +52,7 @@ struct DialogApprover: SigningApprover {
         }
         for hop in request.chain {
             let kind = hop.forwarding ? "FORWARDED via" : "bound to"
-            lines.append("Session \(kind) host key \(hop.fingerprint) (\(hop.algorithm)).")
+            lines.append("Session \(kind) \(HostNames.shared.label(for: hop.fingerprint)).")
         }
         return lines.joined(separator: "\n")
     }

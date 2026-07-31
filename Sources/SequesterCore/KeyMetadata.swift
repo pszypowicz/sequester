@@ -56,6 +56,24 @@ public struct DestinationRecord: Codable, Hashable, Sendable, Identifiable {
     public var destination: ChainHop? { hops.last }
 }
 
+/// A standing applied to every path whose chain starts with these hops,
+/// so a whole branch of the destination tree can be governed at once.
+public struct BranchRule: Codable, Hashable, Sendable, Identifiable {
+    public var hops: [ChainHop]
+    public var state: DestinationState
+
+    public init(hops: [ChainHop], state: DestinationState) {
+        self.hops = hops
+        self.state = state
+    }
+
+    public var id: String { DestinationRecord.chainID(hops) }
+
+    public func matches(_ chain: [ChainHop]) -> Bool {
+        chain.count >= hops.count && Array(chain.prefix(hops.count)) == hops
+    }
+}
+
 /// Everything Sequester knows about a key besides the Secure Enclave key
 /// material itself. Stored as JSON in the keychain item's generic attribute.
 public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
@@ -73,6 +91,8 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     public var blockForwarded: Bool
     /// Observed signing paths with their standing.
     public var destinations: [DestinationRecord]
+    /// Standings applied to whole branches of the destination tree.
+    public var branchRules: [BranchRule]
     /// The public key (x9.63 uncompressed point), cached at creation so
     /// listing never has to load Enclave key handles.
     public let publicKey: Data
@@ -82,18 +102,19 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
 
     public init(name: String, keyDescription: String, authRequired: Bool,
                 blockForwarded: Bool = false, destinations: [DestinationRecord] = [],
-                publicKey: Data, createdAt: Date) {
+                branchRules: [BranchRule] = [], publicKey: Data, createdAt: Date) {
         self.name = name
         self.keyDescription = keyDescription
         self.authRequired = authRequired
         self.blockForwarded = blockForwarded
         self.destinations = destinations
+        self.branchRules = branchRules
         self.publicKey = publicKey
         self.createdAt = createdAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, keyDescription, authRequired, blockForwarded, destinations, publicKey, createdAt
+        case name, keyDescription, authRequired, blockForwarded, destinations, branchRules, publicKey, createdAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -103,6 +124,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         authRequired = try container.decode(Bool.self, forKey: .authRequired)
         blockForwarded = try container.decodeIfPresent(Bool.self, forKey: .blockForwarded) ?? false
         destinations = try container.decodeIfPresent([DestinationRecord].self, forKey: .destinations) ?? []
+        branchRules = try container.decodeIfPresent([BranchRule].self, forKey: .branchRules) ?? []
         publicKey = try container.decode(Data.self, forKey: .publicKey)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }

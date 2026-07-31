@@ -51,6 +51,11 @@ final class KeyStore {
         reload()
     }
 
+    func setBranchRule(name: String, hops: [ChainHop], state: DestinationState) {
+        EnclaveKeyStore.setBranchRule(name: name, hops: hops, state: state)
+        reload()
+    }
+
     func delete(name: String) throws {
         try EnclaveKeyStore.delete(name: name)
         reload()

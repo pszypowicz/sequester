@@ -39,10 +39,21 @@ public struct ApprovalRequest: Sendable {
     public let canRemember: Bool
 }
 
-public enum ApprovalDecision: Sendable {
-    case deny
-    case allow
-    case allowAndRemember
+public struct ApprovalDecision: Sendable {
+    public var allowed: Bool
+    /// Approve the destination so future requests on this exact path sign
+    /// without asking.
+    public var remember: Bool
+    /// A name the user gave the destination host while answering.
+    public var destinationName: String?
+
+    public init(allowed: Bool, remember: Bool = false, destinationName: String? = nil) {
+        self.allowed = allowed
+        self.remember = remember
+        self.destinationName = destinationName
+    }
+
+    public static let deny = ApprovalDecision(allowed: false)
 }
 
 /// Presented with the facts of a signature request, returns the user's
@@ -137,14 +148,15 @@ public struct Agent: Sendable {
                     chain: chain,
                     canRemember: !chain.isEmpty
                 ))
-                switch approval {
-                case .deny:
+                guard approval.allowed else {
                     Log.agent.log("Denied signature with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
                     return Response.failure
-                case .allowAndRemember:
+                }
+                if let destination = chain.last, let name = approval.destinationName {
+                    HostNames.shared.setName(name, for: destination.fingerprint)
+                }
+                if approval.remember {
                     EnclaveKeyStore.setDestinationState(name: key.name, id: DestinationRecord.chainID(chain), state: .approved)
-                case .allow:
-                    break
                 }
             }
         }
@@ -170,7 +182,7 @@ public struct Agent: Sendable {
     private func signReason(key: KeyMetadata, session: AgentSession, chain: [ChainHop]) -> String {
         var reason = "sign an SSH request from \(session.provenance.displayName) with key \"\(key.name)\""
         if let destination = chain.last {
-            reason += " for \(destination.fingerprint)"
+            reason += " for \(HostNames.shared.label(for: destination.fingerprint))"
         }
         if chain.contains(where: { $0.forwarding }) {
             reason += " (FORWARDED)"

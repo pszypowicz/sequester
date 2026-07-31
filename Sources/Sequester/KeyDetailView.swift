@@ -6,9 +6,11 @@ import SequesterCore
 struct KeyDetailView: View {
 
     @Environment(KeyStore.self) private var store
+    @Environment(HostNameStore.self) private var hostNames
 
     let key: KeyMetadata
     @State private var errorMessage: String?
+    @State private var namingTarget: NamingTarget?
 
     var body: some View {
         Form {
@@ -31,25 +33,6 @@ struct KeyDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section {
-                if key.destinations.isEmpty {
-                    Text("No requests observed yet. Destinations appear here as the key gets used, each one the exact path a request took, with forwarding hops as branches.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(DestinationTree.build(key.destinations)) { node in
-                        DestinationNodeView(
-                            node: node,
-                            allowApprove: !key.authRequired,
-                            onState: { id, state in store.setDestinationState(name: key.name, id: id, state: state) },
-                            onDelete: { id in store.removeDestination(name: key.name, id: id) }
-                        )
-                    }
-                }
-            } header: {
-                Text("Destinations")
-            }
-
             Section("Public key") {
                 CopyRow(icon: "doc.text", label: "Public key path", value: key.publicKeyFileURL.path, revealURL: key.publicKeyFileURL)
                 CopyRow(icon: "key", label: "Public key", value: key.publicKeyLine)
@@ -62,8 +45,42 @@ struct KeyDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+
+            Section {
+                if key.destinations.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No usage yet")
+                        Text("Destinations appear here as the key gets used, each one the exact path a request took, with forwarding hops as branches.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                } else {
+                    ForEach(DestinationTree.build(key.destinations)) { node in
+                        DestinationNodeView(
+                            node: node,
+                            allowApprove: !key.authRequired,
+                            label: { hostNames.label(for: $0) },
+                            branchState: { id in key.branchRules.first { $0.id == id }?.state ?? .neutral },
+                            onRecordState: { id, state in store.setDestinationState(name: key.name, id: id, state: state) },
+                            onBranchState: { hops, state in store.setBranchRule(name: key.name, hops: hops, state: state) },
+                            onDelete: { id in store.removeDestination(name: key.name, id: id) },
+                            onName: { namingTarget = NamingTarget(id: $0) }
+                        )
+                    }
+                }
+            } header: {
+                Text("Destinations")
+            } footer: {
+                Text("A standing on a hop covers every path through it. A block anywhere on the path wins; otherwise the most specific standing applies. Right-click a host to name it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
+        .sheet(item: $namingTarget) { target in
+            NameHostSheet(fingerprint: target.id)
+        }
         .onAppear {
             store.reload()
         }
@@ -90,7 +107,6 @@ struct KeyDetailView: View {
             }
         )
     }
-
 }
 
 /// One tree node: a bare record row for leaves, a disclosure branch for
@@ -99,8 +115,12 @@ private struct DestinationNodeView: View {
 
     let node: DestinationTree.Node
     let allowApprove: Bool
-    let onState: (String, DestinationState) -> Void
+    let label: (String) -> String
+    let branchState: (String) -> DestinationState
+    let onRecordState: (String, DestinationState) -> Void
+    let onBranchState: ([ChainHop], DestinationState) -> Void
     let onDelete: (String) -> Void
+    let onName: (String) -> Void
 
     @State private var expanded = true
 
@@ -109,8 +129,10 @@ private struct DestinationNodeView: View {
             DestinationRecordRow(
                 record: record,
                 allowApprove: allowApprove,
-                onState: { onState(record.id, $0) },
-                onDelete: { onDelete(record.id) }
+                label: label,
+                onState: { onRecordState(record.id, $0) },
+                onDelete: { onDelete(record.id) },
+                onName: onName
             )
         } else {
             DisclosureGroup(isExpanded: $expanded) {
@@ -118,32 +140,74 @@ private struct DestinationNodeView: View {
                     DestinationRecordRow(
                         record: record,
                         allowApprove: allowApprove,
-                        onState: { onState(record.id, $0) },
-                        onDelete: { onDelete(record.id) }
+                        label: label,
+                        onState: { onRecordState(record.id, $0) },
+                        onDelete: { onDelete(record.id) },
+                        onName: onName
                     )
                 }
                 ForEach(node.children) { child in
                     DestinationNodeView(
                         node: child,
                         allowApprove: allowApprove,
-                        onState: onState,
-                        onDelete: onDelete
+                        label: label,
+                        branchState: branchState,
+                        onRecordState: onRecordState,
+                        onBranchState: onBranchState,
+                        onDelete: onDelete,
+                        onName: onName
                     )
                 }
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .foregroundStyle(.secondary)
-                    Text(node.fingerprint)
-                        .font(.system(.caption, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(node.algorithm)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                branchLabel
             }
         }
+    }
+
+    private var branchLabel: some View {
+        let state = branchState(DestinationRecord.chainID(node.hops))
+        let name = label(node.fingerprint)
+        return HStack(spacing: 6) {
+            Image(systemName: "arrow.triangle.branch")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
+                    .font(name == node.fingerprint ? .system(.caption, design: .monospaced) : .body)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if name != node.fingerprint {
+                    Text(node.fingerprint)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .contextMenu {
+                Button("Name This Host…") { onName(node.fingerprint) }
+            }
+            Spacer()
+            if allowApprove {
+                branchButton(state, .approved, icon: "checkmark.shield", tint: .green,
+                             help: "Sign without asking for everything through this hop")
+            }
+            branchButton(state, .neutral, icon: "questionmark.circle", tint: .secondary,
+                         help: "No branch standing")
+            branchButton(state, .blocked, icon: "xmark.shield", tint: .red,
+                         help: "Deny everything through this hop")
+        }
+    }
+
+    private func branchButton(_ current: DestinationState, _ state: DestinationState,
+                              icon: String, tint: Color, help: String) -> some View {
+        Button {
+            onBranchState(node.hops, state)
+        } label: {
+            Image(systemName: current == state ? "\(icon).fill" : icon)
+                .foregroundStyle(current == state ? tint : Color.secondary)
+        }
+        .buttonStyle(.borderless)
+        .help(help)
     }
 }
 
@@ -153,15 +217,19 @@ private struct DestinationRecordRow: View {
 
     let record: DestinationRecord
     let allowApprove: Bool
+    let label: (String) -> String
     let onState: (DestinationState) -> Void
     let onDelete: () -> Void
+    let onName: (String) -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        let fingerprint = record.destination?.fingerprint ?? "unknown"
+        let name = label(fingerprint)
+        return HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(record.destination?.fingerprint ?? "unknown")
-                        .font(.system(.caption, design: .monospaced))
+                    Text(name)
+                        .font(name == fingerprint ? .system(.caption, design: .monospaced) : .body)
                         .textSelection(.enabled)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -173,9 +241,19 @@ private struct DestinationRecordRow: View {
                             .background(.orange.opacity(0.25), in: RoundedRectangle(cornerRadius: 3))
                     }
                 }
+                if name != fingerprint {
+                    Text(fingerprint)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
                 Text(usageDescription)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            }
+            .contextMenu {
+                Button("Name This Host…") { onName(fingerprint) }
             }
             Spacer()
             if allowApprove {

@@ -6,6 +6,7 @@ struct SequesterApp: App {
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store = KeyStore()
+    @State private var hostNames = HostNameStore()
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
 
     init() {
@@ -16,6 +17,7 @@ struct SequesterApp: App {
         Window("Sequester", id: "main") {
             KeyListView()
                 .environment(store)
+                .environment(hostNames)
                 .onAppear {
                     // Whatever path opened the window, present it like a
                     // regular app: with a menu bar and a Dock icon. The

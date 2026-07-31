@@ -224,3 +224,75 @@ import CryptoKit
         #expect(metadata.destinations.isEmpty)
     }
 }
+
+@Suite struct BranchRuleTests {
+
+    private let vm1 = ChainHop(fingerprint: "SHA256:vm1", algorithm: "ssh-ed25519", forwarding: true)
+    private let vm2 = ChainHop(fingerprint: "SHA256:vm2", algorithm: "ssh-ed25519", forwarding: true)
+    private let github = ChainHop(fingerprint: "SHA256:gh", algorithm: "ssh-ed25519", forwarding: false)
+
+    private func makeKey(destinations: [DestinationRecord] = [], rules: [BranchRule] = []) -> KeyMetadata {
+        KeyMetadata(
+            name: "test", keyDescription: "", authRequired: false,
+            destinations: destinations, branchRules: rules,
+            publicKey: Data(count: 65), createdAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    private func record(_ hops: [ChainHop], _ state: DestinationState) -> DestinationRecord {
+        DestinationRecord(
+            hops: hops, state: state,
+            firstSeen: Date(timeIntervalSince1970: 0), lastUsed: Date(timeIntervalSince1970: 0), count: 1
+        )
+    }
+
+    @Test func branchRuleCoversEveryPathThroughIt() {
+        let key = makeKey(rules: [BranchRule(hops: [vm1], state: .blocked)])
+        #expect(PolicyEngine.evaluate(key: key, chain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, chain: [vm1]) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, chain: [vm2, github]) == .ask)
+    }
+
+    /// The user's case: block github through vm1, approve it through vm2.
+    @Test func perHopGranularity() {
+        let key = makeKey(rules: [
+            BranchRule(hops: [vm1], state: .blocked),
+            BranchRule(hops: [vm2], state: .approved),
+        ])
+        #expect(PolicyEngine.evaluate(key: key, chain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, chain: [vm2, github]) == .allow)
+    }
+
+    @Test func blockAnywhereOnPathWins() {
+        let blockedBranch = makeKey(
+            destinations: [record([vm1, github], .approved)],
+            rules: [BranchRule(hops: [vm1], state: .blocked)]
+        )
+        #expect(PolicyEngine.evaluate(key: blockedBranch, chain: [vm1, github]) == .deny)
+
+        let blockedLeaf = makeKey(
+            destinations: [record([vm1, github], .blocked)],
+            rules: [BranchRule(hops: [vm1], state: .approved)]
+        )
+        #expect(PolicyEngine.evaluate(key: blockedLeaf, chain: [vm1, github]) == .deny)
+    }
+
+    @Test func exactRecordBeatsApprovedBranchOnlyWhenBlocking() {
+        let key = makeKey(
+            destinations: [record([vm2, github], .neutral)],
+            rules: [BranchRule(hops: [vm2], state: .approved)]
+        )
+        #expect(PolicyEngine.evaluate(key: key, chain: [vm2, github]) == .allow)
+    }
+
+    @Test func branchRulesDecodeWhenAbsent() throws {
+        let legacy = """
+        {"name":"k","keyDescription":"","authRequired":false,\
+        "publicKey":"\(Data(count: 65).base64EncodedString())","createdAt":0}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let metadata = try decoder.decode(KeyMetadata.self, from: Data(legacy.utf8))
+        #expect(metadata.branchRules.isEmpty)
+    }
+}

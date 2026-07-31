@@ -12,24 +12,31 @@ public enum SigningDecision: Equatable, Sendable {
 }
 
 /// Pure decision logic over a key's settings and the binding chain of the
-/// requesting connection. Unknown paths ask; only an explicit standing or
-/// the key-level forwarding block changes that.
+/// requesting connection.
+///
+/// A block anywhere on the path wins; otherwise the most specific standing
+/// applies, where the exact chain beats a branch rule; anything unknown
+/// asks.
 public enum PolicyEngine {
 
     public static func evaluate(key: KeyMetadata, chain: [ChainHop]) -> SigningDecision {
         if key.blockForwarded && chain.contains(where: { $0.forwarding }) {
             return .deny
         }
-        guard let record = key.destinations.first(where: { $0.hops == chain }) else {
-            return .ask
-        }
-        switch record.state {
-        case .blocked:
+        let record = key.destinations.first { $0.hops == chain }
+        if record?.state == .blocked {
             return .deny
-        case .approved:
-            return .allow
-        case .neutral:
-            return .ask
         }
+        let branchRules = key.branchRules.filter { $0.matches(chain) }
+        if branchRules.contains(where: { $0.state == .blocked }) {
+            return .deny
+        }
+        if record?.state == .approved {
+            return .allow
+        }
+        if branchRules.contains(where: { $0.state == .approved }) {
+            return .allow
+        }
+        return .ask
     }
 }
