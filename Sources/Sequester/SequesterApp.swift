@@ -13,7 +13,7 @@ struct SequesterApp: App {
     }
 
     var body: some Scene {
-        Window("Sequester Settings", id: "main") {
+        Window("Sequester", id: "main") {
             KeyListView()
                 .environment(store)
                 .environment(appDelegate.agentStatus)
