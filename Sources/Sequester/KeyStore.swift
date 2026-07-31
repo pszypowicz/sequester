@@ -56,6 +56,11 @@ final class KeyStore {
         reload()
     }
 
+    func removeDestinationsUnder(name: String, prefix: [ChainHop]) {
+        EnclaveKeyStore.removeDestinationsUnder(name: name, prefix: prefix)
+        reload()
+    }
+
     func setBranchRule(name: String, hops: [ChainHop], state: DestinationState) {
         EnclaveKeyStore.setBranchRule(name: name, hops: hops, state: state)
         reload()

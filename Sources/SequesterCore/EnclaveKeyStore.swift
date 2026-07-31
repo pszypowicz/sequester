@@ -162,6 +162,17 @@ public enum EnclaveKeyStore {
         Log.store.log("Removed destination \(id, privacy: .public) of \(name, privacy: .public)")
     }
 
+    /// Forgets every observed path whose chain starts with these hops, i.e.
+    /// the whole subtree rooted at a hop.
+    public static func removeDestinationsUnder(name: String, prefix: [ChainHop]) {
+        guard !prefix.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return }
+        metadata.destinations.removeAll { record in
+            record.hops.count >= prefix.count && Array(record.hops.prefix(prefix.count)) == prefix
+        }
+        try? KeyStorage.updateMetadata(metadata)
+        Log.store.log("Removed destinations under \(DestinationRecord.chainID(prefix), privacy: .public) of \(name, privacy: .public)")
+    }
+
     /// Sets the standing for every path starting with these hops. A
     /// neutral state drops the rule, since neutral is the default.
     public static func setBranchRule(name: String, hops: [ChainHop], state: DestinationState) {

@@ -68,6 +68,7 @@ struct KeyDetailView: View {
                             onRecordState: { id, state in store.setDestinationState(name: key.name, id: id, state: state) },
                             onBranchState: { hops, state in store.setBranchRule(name: key.name, hops: hops, state: state) },
                             onDelete: { id in store.removeDestination(name: key.name, id: id) },
+                            onDeleteBranch: { hops in store.removeDestinationsUnder(name: key.name, prefix: hops) },
                             onName: { namingTarget = NamingTarget(id: $0) }
                         )
                     }
@@ -155,6 +156,7 @@ private struct DestinationNodeView: View {
     let onRecordState: (String, DestinationState) -> Void
     let onBranchState: ([ChainHop], DestinationState) -> Void
     let onDelete: (String) -> Void
+    let onDeleteBranch: ([ChainHop]) -> Void
     let onName: (String) -> Void
 
     @State private var expanded = true
@@ -190,6 +192,7 @@ private struct DestinationNodeView: View {
                         onRecordState: onRecordState,
                         onBranchState: onBranchState,
                         onDelete: onDelete,
+                        onDeleteBranch: onDeleteBranch,
                         onName: onName
                     )
                 }
@@ -228,6 +231,13 @@ private struct DestinationNodeView: View {
                          help: "No branch standing")
             branchButton(state, .blocked, icon: "xmark.shield", tint: .red,
                          help: "Deny everything through this hop")
+            Button {
+                onDeleteBranch(node.hops)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .help("Forget all destinations through this hop")
         }
     }
 
