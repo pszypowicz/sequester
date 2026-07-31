@@ -72,6 +72,16 @@ import CryptoKit
         #expect(parts[2] == "test")
     }
 
+    @Test func keyPublicKeyLineCommentIsScopedToSequester() {
+        let key = P256.Signing.PrivateKey()
+        let metadata = KeyMetadata(name: "work", keyDescription: "", authRequired: false,
+                                   publicKey: key.publicKey.x963Representation,
+                                   createdAt: Date(timeIntervalSince1970: 0))
+        let parts = metadata.publicKeyLine.split(separator: " ")
+        #expect(parts.count == 3)
+        #expect(parts[2] == "work@sequester")
+    }
+
     @Test func signatureBlobParsesAsMpints() throws {
         let key = P256.Signing.PrivateKey()
         let signature = try key.signature(for: Data("payload".utf8))
