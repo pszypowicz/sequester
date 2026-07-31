@@ -48,7 +48,38 @@ public enum KeyStorage {
         return query
     }
 
+    /// Serializes every metadata write. The agent (background threads) and
+    /// the UI (main actor) mutate the same items; without this a concurrent
+    /// read-modify-write could clobber a change - e.g. an observation from a
+    /// signature overwriting a block the user just set. Reads are not
+    /// serialized; each SecItem call is atomic on its own.
+    private static let mutationLock = NSLock()
+
+    /// Atomic read-modify-write of a key's metadata. `body` mutates the
+    /// loaded copy and returns whether it changed anything; the item is
+    /// written and observers notified only on a real change.
+    @discardableResult
+    static func mutate(name: String, _ body: (inout KeyMetadata) throws -> Bool) throws -> KeyMetadata {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
+        var metadata = try load(name: name).metadata
+        if try body(&metadata) {
+            try writeMetadataLocked(metadata)
+            postChange()
+        }
+        return metadata
+    }
+
+    private static func writeMetadataLocked(_ metadata: KeyMetadata) throws {
+        let update: [CFString: Any] = [kSecAttrGeneric: try JSONEncoder().encode(metadata)]
+        let status = SecItemUpdate(baseQuery(name: metadata.name) as CFDictionary, update as CFDictionary)
+        if status == errSecItemNotFound { throw KeychainError.notFound(metadata.name) }
+        guard status == errSecSuccess else { throw KeychainError.status(status) }
+    }
+
     public static func save(dataRepresentation: Data, metadata: KeyMetadata) throws {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
         var attributes = baseQuery(name: metadata.name)
         attributes[kSecAttrLabel] = "Sequester: \(metadata.name)"
         attributes[kSecAttrGeneric] = try JSONEncoder().encode(metadata)
@@ -107,6 +138,8 @@ public enum KeyStorage {
     /// Moves an item to a new account (the key's new name), updating the
     /// label and metadata with it. The keychain enforces name uniqueness.
     public static func rename(from oldName: String, metadata: KeyMetadata) throws {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
         let update: [CFString: Any] = [
             kSecAttrAccount: metadata.name,
             kSecAttrLabel: "Sequester: \(metadata.name)",
@@ -125,17 +158,9 @@ public enum KeyStorage {
         }
     }
 
-    public static func updateMetadata(_ metadata: KeyMetadata) throws {
-        let update: [CFString: Any] = [
-            kSecAttrGeneric: try JSONEncoder().encode(metadata),
-        ]
-        let status = SecItemUpdate(baseQuery(name: metadata.name) as CFDictionary, update as CFDictionary)
-        if status == errSecItemNotFound { throw KeychainError.notFound(metadata.name) }
-        guard status == errSecSuccess else { throw KeychainError.status(status) }
-        postChange()
-    }
-
     public static func delete(name: String) throws {
+        mutationLock.lock()
+        defer { mutationLock.unlock() }
         let status = SecItemDelete(baseQuery(name: name) as CFDictionary)
         if status == errSecItemNotFound { throw KeychainError.notFound(name) }
         guard status == errSecSuccess else { throw KeychainError.status(status) }

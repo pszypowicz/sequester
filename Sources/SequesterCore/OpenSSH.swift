@@ -22,7 +22,7 @@ public enum OpenSSH {
     public static func p256SignatureBlob(rawSignature: Data) -> Data {
         let half = rawSignature.count / 2
         let r = SSHWire.mpint(fixedWidthPositive: Data(rawSignature.prefix(half)))
-        let s = SSHWire.mpint(fixedWidthPositive: Data(rawSignature.suffix(from: half)))
+        let s = SSHWire.mpint(fixedWidthPositive: Data(rawSignature.dropFirst(half)))
         var inner = SSHWire.lengthPrefixed(r)
         inner.append(SSHWire.lengthPrefixed(s))
         var blob = SSHWire.lengthPrefixed(p256Identifier)

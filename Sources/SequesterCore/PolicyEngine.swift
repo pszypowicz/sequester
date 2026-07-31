@@ -14,10 +14,11 @@ public enum SigningDecision: Equatable, Sendable {
 /// Pure decision logic over a key's settings and the binding chain of the
 /// requesting connection.
 ///
-/// A block anywhere on the path wins; otherwise the most specific standing
-/// applies, where the exact binding chain beats a branch rule. A locked key then
-/// denies anything not already approved. An unlocked key auto-approves
-/// local (non-forwarded) use if configured, and otherwise asks.
+/// Precedence: a block anywhere on the path (the exact chain, a branch rule,
+/// or block-forwarded) wins; otherwise any approval (the exact chain, a
+/// branch rule, or approve-all) allows; otherwise a locked key denies, an
+/// unlocked key auto-approves local (non-forwarded) use if configured, and
+/// everything else asks. Block-wins is the safe default for a security tool.
 public enum PolicyEngine {
 
     public static func evaluate(key: KeyMetadata, bindingChain: [BindingHop]) -> SigningDecision {

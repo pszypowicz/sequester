@@ -24,7 +24,7 @@ public struct BindingHop: Codable, Hashable, Sendable {
 }
 
 /// A path a key has been asked to sign for, keyed by the exact binding
-/// binding chain observed. Serves as both the usage log entry and the per-path
+/// chain observed. Serves as both the usage log entry and the per-path
 /// policy, so "github reached locally" and "github reached through vm1"
 /// are distinct records with independent standing.
 public struct DestinationRecord: Codable, Hashable, Sendable, Identifiable {
@@ -47,10 +47,6 @@ public struct DestinationRecord: Codable, Hashable, Sendable, Identifiable {
     }
 
     public var id: String { Self.bindingChainID(hops) }
-
-    public var isForwarded: Bool {
-        hops.contains { $0.forwarding }
-    }
 
     /// The final target of the binding chain.
     public var destination: BindingHop? { hops.last }
@@ -127,26 +123,6 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         self.branchRules = branchRules
         self.publicKey = publicKey
         self.createdAt = createdAt
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case name, keyDescription, authRequired, blockForwarded, approveAll, autoApprove, locked
-        case destinations, branchRules, publicKey, createdAt
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        name = try container.decode(String.self, forKey: .name)
-        keyDescription = try container.decode(String.self, forKey: .keyDescription)
-        authRequired = try container.decode(Bool.self, forKey: .authRequired)
-        blockForwarded = try container.decodeIfPresent(Bool.self, forKey: .blockForwarded) ?? false
-        approveAll = try container.decodeIfPresent(Bool.self, forKey: .approveAll) ?? false
-        autoApprove = try container.decodeIfPresent(Bool.self, forKey: .autoApprove) ?? false
-        locked = try container.decodeIfPresent(Bool.self, forKey: .locked) ?? false
-        destinations = try container.decodeIfPresent([DestinationRecord].self, forKey: .destinations) ?? []
-        branchRules = try container.decodeIfPresent([BranchRule].self, forKey: .branchRules) ?? []
-        publicKey = try container.decode(Data.self, forKey: .publicKey)
-        createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 
     public var publicKeyBlob: Data {

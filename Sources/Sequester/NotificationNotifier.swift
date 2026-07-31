@@ -18,9 +18,6 @@ struct NotificationNotifier: SigningNotifier {
             parts.append("(forwarded)")
         }
         content.body = parts.isEmpty ? "SSH signature" : parts.joined(separator: " ")
-        if silent {
-            content.interruptionLevel = .timeSensitive
-        }
 
         let request = UNNotificationRequest(
             identifier: UUID().uuidString,

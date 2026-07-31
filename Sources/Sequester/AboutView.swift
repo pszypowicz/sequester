@@ -1,12 +1,8 @@
 import SwiftUI
 import SequesterCore
 
-func formatVersion(base: String) -> String {
-    #if DEBUG
-    return "\(base) (\(BuildMetadata.gitHash) \(BuildMetadata.buildDate))"
-    #else
-    return "\(base) (\(BuildMetadata.gitHash))"
-    #endif
+private func formatVersion(base: String) -> String {
+    "\(base) (\(BuildMetadata.gitHash))"
 }
 
 private let repoURL = URL(string: "https://github.com/pszypowicz/sequester")!

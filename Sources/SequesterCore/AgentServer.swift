@@ -21,9 +21,15 @@ public final class AgentServer: @unchecked Sendable {
 
     private static let maxMessageSize: UInt32 = 1 << 20
 
+    private static let maxConcurrentConnections = 64
+
     private let socketPath: String
     private let agent: Agent
     private let acceptQueue = DispatchQueue(label: "cz.szypowi.sequester.agent.accept")
+    // Bounds how many connections are handled at once. Each connection holds
+    // a blocking GCD thread for its lifetime, so without this a local process
+    // opening many sockets could exhaust the thread pool and fd table.
+    private let connectionLimit = DispatchSemaphore(value: maxConcurrentConnections)
     private var listenFD: Int32 = -1
 
     public init(socketPath: String, agent: Agent) {
@@ -76,6 +82,8 @@ public final class AgentServer: @unchecked Sendable {
 
     public func stop() {
         if listenFD >= 0 {
+            // shutdown wakes the blocked accept; close alone does not on Darwin.
+            shutdown(listenFD, SHUT_RDWR)
             close(listenFD)
             listenFD = -1
         }
@@ -94,8 +102,11 @@ public final class AgentServer: @unchecked Sendable {
             var noSigpipe: Int32 = 1
             setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout<Int32>.size))
             let agent = agent
+            let connectionLimit = connectionLimit
+            connectionLimit.wait()
             DispatchQueue.global(qos: .userInitiated).async {
                 Self.handleConnection(fd: fd, agent: agent)
+                connectionLimit.signal()
             }
         }
     }
@@ -109,7 +120,7 @@ public final class AgentServer: @unchecked Sendable {
         }
         while true {
             guard let header = readExactly(fd: fd, count: 4) else { return }
-            let length = header.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian }
+            let length = header.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian }
             guard length > 0, length <= maxMessageSize else { return }
             guard let message = readExactly(fd: fd, count: Int(length)) else { return }
 

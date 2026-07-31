@@ -255,6 +255,13 @@ public struct Agent: Sendable {
               let forwardingByte = try? reader.readByte() else {
             return Response.failure
         }
+        // Bound the chain: a client could otherwise append host keys it
+        // controls without limit, and the policy re-scans the chain on every
+        // sign. Real forwarding chains are short.
+        guard session.bindings.count < 32 else {
+            Log.agent.log("Rejected session-bind: chain length limit reached, requester \(session.provenance.displayName, privacy: .public)")
+            return Response.failure
+        }
         let fingerprint = OpenSSH.fingerprintSHA256(blob: hostKeyBlob)
         guard HostKeyVerifier.verify(hostKey: hostKeyBlob, signature: signature, over: sessionID) else {
             Log.agent.log("Rejected session-bind with an invalid signature for \(fingerprint, privacy: .public), requester \(session.provenance.displayName, privacy: .public)")

@@ -91,9 +91,7 @@ public enum EnclaveKeyStore {
 
     @discardableResult
     public static func updateDescription(name: String, description: String) throws -> KeyMetadata {
-        var metadata = try KeyStorage.load(name: name).metadata
-        metadata.keyDescription = description
-        try KeyStorage.updateMetadata(metadata)
+        let metadata = try KeyStorage.mutate(name: name) { $0.keyDescription = description; return true }
         Log.store.log("Updated description of \(name, privacy: .public)")
         return metadata
     }
@@ -114,9 +112,7 @@ public enum EnclaveKeyStore {
 
     @discardableResult
     public static func setBlockForwarded(name: String, blocked: Bool) throws -> KeyMetadata {
-        var metadata = try KeyStorage.load(name: name).metadata
-        metadata.blockForwarded = blocked
-        try KeyStorage.updateMetadata(metadata)
+        let metadata = try KeyStorage.mutate(name: name) { $0.blockForwarded = blocked; return true }
         Log.store.log("Set blockForwarded of \(name, privacy: .public) to \(blocked, privacy: .public)")
         return metadata
     }
@@ -126,32 +122,29 @@ public enum EnclaveKeyStore {
     /// cleared so nothing contradicts it.
     @discardableResult
     public static func setApproveAll(name: String, enabled: Bool) throws -> KeyMetadata {
-        var metadata = try KeyStorage.load(name: name).metadata
-        metadata.approveAll = enabled
-        if enabled {
-            metadata.autoApprove = true
-            metadata.blockForwarded = false
-            metadata.locked = false
+        let metadata = try KeyStorage.mutate(name: name) { m in
+            m.approveAll = enabled
+            if enabled {
+                m.autoApprove = true
+                m.blockForwarded = false
+                m.locked = false
+            }
+            return true
         }
-        try KeyStorage.updateMetadata(metadata)
         Log.store.log("Set approveAll of \(name, privacy: .public) to \(enabled, privacy: .public)")
         return metadata
     }
 
     @discardableResult
     public static func setAutoApprove(name: String, enabled: Bool) throws -> KeyMetadata {
-        var metadata = try KeyStorage.load(name: name).metadata
-        metadata.autoApprove = enabled
-        try KeyStorage.updateMetadata(metadata)
+        let metadata = try KeyStorage.mutate(name: name) { $0.autoApprove = enabled; return true }
         Log.store.log("Set autoApprove of \(name, privacy: .public) to \(enabled, privacy: .public)")
         return metadata
     }
 
     @discardableResult
     public static func setLocked(name: String, locked: Bool) throws -> KeyMetadata {
-        var metadata = try KeyStorage.load(name: name).metadata
-        metadata.locked = locked
-        try KeyStorage.updateMetadata(metadata)
+        let metadata = try KeyStorage.mutate(name: name) { $0.locked = locked; return true }
         Log.store.log("Set locked of \(name, privacy: .public) to \(locked, privacy: .public)")
         return metadata
     }
@@ -164,58 +157,70 @@ public enum EnclaveKeyStore {
     /// recorded; best effort, the signing flow must not fail on bookkeeping.
     @discardableResult
     public static func recordObservation(name: String, hops: [BindingHop], createIfNew: Bool) -> Bool {
-        guard !hops.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return false }
-        let now = Date()
-        if let index = metadata.destinations.firstIndex(where: { $0.hops == hops }) {
-            metadata.destinations[index].lastUsed = now
-            metadata.destinations[index].count += 1
-        } else if createIfNew {
-            metadata.destinations.append(DestinationRecord(
-                hops: hops, state: .neutral, firstSeen: now, lastUsed: now, count: 1
-            ))
-        } else {
-            return false
+        guard !hops.isEmpty else { return false }
+        var recorded = false
+        _ = try? KeyStorage.mutate(name: name) { m in
+            let now = Date()
+            if let index = m.destinations.firstIndex(where: { $0.hops == hops }) {
+                m.destinations[index].lastUsed = now
+                m.destinations[index].count += 1
+            } else if createIfNew {
+                m.destinations.append(DestinationRecord(
+                    hops: hops, state: .neutral, firstSeen: now, lastUsed: now, count: 1
+                ))
+            } else {
+                return false
+            }
+            recorded = true
+            return true
         }
-        try? KeyStorage.updateMetadata(metadata)
-        return true
+        return recorded
     }
 
     public static func setDestinationState(name: String, id: String, state: DestinationState) {
-        guard var metadata = try? KeyStorage.load(name: name).metadata,
-              let index = metadata.destinations.firstIndex(where: { $0.id == id }) else { return }
-        metadata.destinations[index].state = state
-        try? KeyStorage.updateMetadata(metadata)
+        _ = try? KeyStorage.mutate(name: name) { m in
+            guard let index = m.destinations.firstIndex(where: { $0.id == id }) else { return false }
+            m.destinations[index].state = state
+            return true
+        }
         Log.store.log("Set destination \(id, privacy: .public) of \(name, privacy: .public) to \(state.rawValue, privacy: .public)")
     }
 
     public static func removeDestination(name: String, id: String) {
-        guard var metadata = try? KeyStorage.load(name: name).metadata else { return }
-        metadata.destinations.removeAll { $0.id == id }
-        try? KeyStorage.updateMetadata(metadata)
+        _ = try? KeyStorage.mutate(name: name) { m in
+            let before = m.destinations.count
+            m.destinations.removeAll { $0.id == id }
+            return m.destinations.count != before
+        }
         Log.store.log("Removed destination \(id, privacy: .public) of \(name, privacy: .public)")
     }
 
     /// Forgets every observed path whose binding chain starts with these hops, i.e.
     /// the whole subtree rooted at a hop.
     public static func removeDestinationsUnder(name: String, prefix: [BindingHop]) {
-        guard !prefix.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return }
-        metadata.destinations.removeAll { record in
-            record.hops.count >= prefix.count && Array(record.hops.prefix(prefix.count)) == prefix
+        guard !prefix.isEmpty else { return }
+        _ = try? KeyStorage.mutate(name: name) { m in
+            let before = m.destinations.count
+            m.destinations.removeAll { record in
+                record.hops.count >= prefix.count && Array(record.hops.prefix(prefix.count)) == prefix
+            }
+            return m.destinations.count != before
         }
-        try? KeyStorage.updateMetadata(metadata)
         Log.store.log("Removed destinations under \(DestinationRecord.bindingChainID(prefix), privacy: .public) of \(name, privacy: .public)")
     }
 
     /// Sets the standing for every path starting with these hops. A
     /// neutral state drops the rule, since neutral is the default.
     public static func setBranchRule(name: String, hops: [BindingHop], state: DestinationState) {
-        guard !hops.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return }
+        guard !hops.isEmpty else { return }
         let rule = BranchRule(hops: hops, state: state)
-        metadata.branchRules.removeAll { $0.id == rule.id }
-        if state != .neutral {
-            metadata.branchRules.append(rule)
+        _ = try? KeyStorage.mutate(name: name) { m in
+            m.branchRules.removeAll { $0.id == rule.id }
+            if state != .neutral {
+                m.branchRules.append(rule)
+            }
+            return true
         }
-        try? KeyStorage.updateMetadata(metadata)
         Log.store.log("Set branch \(rule.id, privacy: .public) of \(name, privacy: .public) to \(state.rawValue, privacy: .public)")
     }
 

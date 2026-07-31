@@ -15,7 +15,6 @@ struct DestinationTree {
         /// The route path (forwarding hops) from the root to this node.
         let hops: [BindingHop]
         let fingerprint: String
-        let algorithm: String
         /// Records reached via exactly this route (binding chain == hops + [dest]).
         var destinations: [DestinationRecord]
         /// Longer routes that continue through this node.
@@ -51,8 +50,11 @@ struct DestinationTree {
                                prefix: [BindingHop], into nodes: inout [Node]) {
         guard let hop = route.first else { return }
         let hops = prefix + [hop]
-        let index = nodes.firstIndex { $0.fingerprint == hop.fingerprint } ?? {
-            nodes.append(Node(hops: hops, fingerprint: hop.fingerprint, algorithm: hop.algorithm,
+        // Match on the whole hop, not just its fingerprint, so a hop that
+        // differs only in its forwarding flag is a distinct node, matching
+        // how bindingChainID identifies a chain.
+        let index = nodes.firstIndex { $0.hops.last == hop } ?? {
+            nodes.append(Node(hops: hops, fingerprint: hop.fingerprint,
                               destinations: [], children: [], latestActivity: .distantPast))
             return nodes.count - 1
         }()

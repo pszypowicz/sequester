@@ -35,7 +35,9 @@ public enum HostKeyVerifier {
         case "ecdsa-sha2-nistp521":
             return verifyECDSA(.p521, keyReader: &keyReader, sigData: sigData, message: message)
 
-        case "ssh-rsa", "rsa-sha2-256", "rsa-sha2-512":
+        case "ssh-rsa":
+            // An RSA host key's blob type is always "ssh-rsa"; the hash
+            // (SHA-1/256/512) is chosen from the signature type below.
             return verifyRSA(sigType: sigType, keyReader: &keyReader, sigData: sigData, message: message)
 
         default:

@@ -32,15 +32,25 @@ public final class HostNames: @unchecked Sendable {
 
     public func setName(_ name: String?, for fingerprint: String) {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let updated = lock.withLock { names -> [String: String] in
+        // Persist inside the lock so the defaults write cannot land out of
+        // order with a concurrent setName and leave defaults holding a stale
+        // snapshot.
+        lock.withLock { names in
             if let trimmed, !trimmed.isEmpty {
                 names[fingerprint] = trimmed
             } else {
                 names.removeValue(forKey: fingerprint)
             }
-            return names
+            UserDefaults.standard.set(names, forKey: Self.defaultsKey)
         }
-        UserDefaults.standard.set(updated, forKey: Self.defaultsKey)
         Log.store.log("Named host \(fingerprint, privacy: .public) as \(name ?? "(cleared)", privacy: .public)")
+        NotificationCenter.default.post(name: .sequesterHostNamesDidChange, object: nil)
     }
+}
+
+public extension Notification.Name {
+    /// Posted when a host name is set or cleared, so an open UI can refresh
+    /// the names it shows (the agent may name a host from the approval
+    /// dialog on a background thread).
+    static let sequesterHostNamesDidChange = Notification.Name("cz.szypowi.sequester.hostNamesDidChange")
 }

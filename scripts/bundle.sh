@@ -27,6 +27,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Run from the repo root regardless of caller CWD; every path below is relative.
+cd "$(cd "$(dirname "$0")/.." && pwd)"
+
 # Version comes from the VERSION file - the single source of truth, also
 # read by the BuildMetadata plugin so the app reports the same string.
 VERSION=$(head -1 VERSION 2>/dev/null | tr -d '[:space:]')
@@ -40,7 +43,9 @@ mkdir -p "$APP/MacOS" "$APP/Resources"
 
 cp .build/release/Sequester "$APP/MacOS/Sequester"
 cp Sources/Sequester/Info.plist "$APP/Info.plist"
+# Both version fields come from VERSION; the plist's placeholders are never shipped.
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP/Info.plist"
 
 if [[ -f Resources/Sequester.icns ]]; then
   cp Resources/Sequester.icns "$APP/Resources/Sequester.icns"
@@ -55,7 +60,9 @@ if [[ "$identity" == "adhoc" ]]; then
 else
   # || true: with set -e, a failing security query (locked/absent
   # keychain) would abort before the explicit error below.
-  sign=$(security find-identity -v -p codesigning | awk -v id="$identity" '$0 ~ id {print $2; exit}' || true)
+  # index() is a literal substring test; certificate names contain regex
+  # metacharacters (dots, parentheses around the team id).
+  sign=$(security find-identity -v -p codesigning | awk -v id="$identity" 'index($0, id) {print $2; exit}' || true)
   if [[ -z "$sign" ]]; then
     echo "error: no codesigning identity matching '$identity'" >&2
     echo "List identities with: security find-identity -v -p codesigning" >&2

@@ -102,9 +102,6 @@ struct KeyDetailView: View {
         .sheet(item: $namingTarget) { target in
             NameHostSheet(fingerprint: target.id)
         }
-        .onAppear {
-            store.reload()
-        }
     }
 
     private func settingLabel(_ title: String, _ info: String) -> some View {

@@ -101,8 +101,5 @@ struct KeyListView: View {
         } message: {
             Text("The Secure Enclave key is destroyed and its public key file is removed. Hosts using this key will stop accepting logins. This cannot be undone.")
         }
-        .onAppear {
-            store.reload()
-        }
     }
 }

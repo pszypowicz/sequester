@@ -70,7 +70,7 @@ public struct SSHWireReader {
 
     public mutating func readString() throws -> Data {
         let length = Int(try readUInt32())
-        guard length >= 0, offset + length <= bytes.count else {
+        guard offset + length <= bytes.count else {
             throw ReaderError.truncated
         }
         defer { offset += length }

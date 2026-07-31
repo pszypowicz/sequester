@@ -13,7 +13,7 @@ Early proof of concept. Working today:
 - ECDSA P-256 key generation in the Secure Enclave, with an optional Touch ID requirement enforced by the Enclave itself.
 - SSH agent over a Unix socket (identity listing and signing).
 - Public key files on disk, one per key.
-- Per-key behavior with two modes, editable at any time.
+- Per-key approval policy: per-destination standings plus block-forwarded, approve-local, approve-all, and lock, editable at any time.
 - Start at login via the system login items mechanism, with no separate daemon.
 - Fully sandboxed: the app is confined to its container, with no network access.
 

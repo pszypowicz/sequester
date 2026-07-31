@@ -237,18 +237,6 @@ import CryptoKit
         #expect(PolicyEngine.evaluate(key: key, bindingChain: viaVM2) == .ask)
         #expect(PolicyEngine.evaluate(key: key, bindingChain: [local]) == .ask)
     }
-
-    @Test func metadataDecodesWithoutNewFields() throws {
-        let legacy = """
-        {"name":"k","keyDescription":"","authRequired":false,"policy":"askEveryTime",\
-        "publicKey":"\(Data(count: 65).base64EncodedString())","createdAt":0}
-        """
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .secondsSince1970
-        let metadata = try decoder.decode(KeyMetadata.self, from: Data(legacy.utf8))
-        #expect(metadata.blockForwarded == false)
-        #expect(metadata.destinations.isEmpty)
-    }
 }
 
 @Suite struct BranchRuleTests {
@@ -383,17 +371,6 @@ import CryptoKit
         // A block on the first hop covers the whole depth below it.
         let blocked = makeKey(destinations: [record(deep, .approved)], rules: [BranchRule(hops: [hopA], state: .blocked)])
         #expect(PolicyEngine.evaluate(key: blocked, bindingChain: deep) == .deny)
-    }
-
-    @Test func branchRulesDecodeWhenAbsent() throws {
-        let legacy = """
-        {"name":"k","keyDescription":"","authRequired":false,\
-        "publicKey":"\(Data(count: 65).base64EncodedString())","createdAt":0}
-        """
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .secondsSince1970
-        let metadata = try decoder.decode(KeyMetadata.self, from: Data(legacy.utf8))
-        #expect(metadata.branchRules.isEmpty)
     }
 }
 

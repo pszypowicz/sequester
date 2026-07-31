@@ -9,6 +9,17 @@ import SequesterCore
 final class HostNameStore {
 
     private(set) var names: [String: String] = HostNames.shared.all()
+    private var observer: (any NSObjectProtocol)?
+
+    init() {
+        // Refresh when a host is named anywhere, including from the approval
+        // dialog on the agent thread, so an open key page updates in place.
+        observer = NotificationCenter.default.addObserver(
+            forName: .sequesterHostNamesDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.names = HostNames.shared.all() }
+        }
+    }
 
     func name(for fingerprint: String) -> String? {
         names[fingerprint]
