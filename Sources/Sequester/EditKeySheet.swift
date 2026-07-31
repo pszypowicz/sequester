@@ -29,7 +29,7 @@ struct EditKeySheet: View {
                     TextField("Name", text: $name)
                     TextField("Description", text: $keyDescription, prompt: Text("optional"))
                 } footer: {
-                    Text("The public key filename is derived from the key itself, so renaming never breaks ssh config.")
+                    Text("The public key filename is derived from the key itself, so renaming never breaks SSH config.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

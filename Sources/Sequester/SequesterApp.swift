@@ -16,7 +16,6 @@ struct SequesterApp: App {
         Window("Sequester", id: "main") {
             KeyListView()
                 .environment(store)
-                .environment(appDelegate.agentStatus)
                 .onAppear {
                     // Whatever path opened the window, present it like a
                     // regular app: with a menu bar and a Dock icon. The
@@ -30,10 +29,14 @@ struct SequesterApp: App {
         // icon. Relaunching while running reopens this window instead.
         .defaultLaunchBehavior(.suppressed)
 
+        Window("About Sequester", id: "about") {
+            AboutView()
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+
         MenuBarExtra("Sequester", systemImage: "key.fill", isInserted: $showMenuBarIcon) {
             MenuContent()
-                .environment(store)
-                .environment(appDelegate.agentStatus)
         }
     }
 }

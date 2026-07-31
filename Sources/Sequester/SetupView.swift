@@ -5,7 +5,6 @@ import SequesterCore
 /// app options, and how to point ssh at the agent.
 struct SetupView: View {
 
-    @Environment(AgentStatus.self) private var agentStatus
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @State private var loginEnabled = LoginItem.isEnabled
 
@@ -24,15 +23,6 @@ struct SetupView: View {
     var body: some View {
         Form {
             Section("Agent") {
-                LabeledContent("Status") {
-                    if agentStatus.running {
-                        Label("Running", systemImage: "circle.fill")
-                            .foregroundStyle(.green)
-                    } else {
-                        Label(agentStatus.error ?? "Not running", systemImage: "circle.fill")
-                            .foregroundStyle(.red)
-                    }
-                }
                 CopyRow(icon: "link", label: "Socket path", value: SequesterPaths.socketURL.path)
             }
 
@@ -53,7 +43,7 @@ struct SetupView: View {
                 }
             }
 
-            Section("ssh config") {
+            Section("SSH config") {
                 Text("Add this to ~/.ssh/config. Each key's public half lives next to the socket under a filename derived from the key itself (copy the exact path from the key's page), so per-host IdentityFile entries work the same way they do with plain key files and survive renames.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

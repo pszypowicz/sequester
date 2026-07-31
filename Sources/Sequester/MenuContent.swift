@@ -15,8 +15,8 @@ struct MenuContent: View {
         Divider()
 
         Button("About Sequester", systemImage: "info.circle") {
+            openWindow(id: "about")
             NSApp.activate(ignoringOtherApps: true)
-            NSApp.orderFrontStandardAboutPanel(nil)
         }
 
         Button("Quit Sequester", systemImage: "power") {

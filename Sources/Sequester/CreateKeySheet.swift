@@ -27,7 +27,7 @@ struct CreateKeySheet: View {
                         }
                     }
                 } footer: {
-                    Text("The Touch ID requirement is baked into the key at creation and is permanent. Name, description, and behavior can be changed anytime; the public key filename is derived from the key itself, so renaming never breaks ssh config.")
+                    Text("The Touch ID requirement is baked into the key at creation and is permanent. Name, description, and behavior can be changed anytime; the public key filename is derived from the key itself, so renaming never breaks SSH config.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

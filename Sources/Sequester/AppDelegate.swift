@@ -1,17 +1,9 @@
 import AppKit
-import Observation
 import SequesterCore
-
-@Observable
-final class AgentStatus {
-    var running = false
-    var error: String?
-}
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    let agentStatus = AgentStatus()
     private var server: AgentServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -22,10 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try server.start()
             self.server = server
-            agentStatus.running = true
         } catch {
             Log.app.error("Agent failed to start: \(error.localizedDescription, privacy: .public)")
-            agentStatus.error = error.localizedDescription
         }
 
         // The settings window promotes the app to a regular one (menu bar,
