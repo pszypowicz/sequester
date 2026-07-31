@@ -205,45 +205,32 @@ private struct DestinationRowView: View {
     @ViewBuilder private var content: some View {
         switch row.kind {
         case .route(let node):
-            hostLabel(fingerprint: node.fingerprint, icon: "arrow.triangle.branch", trailing: nil)
+            hostLabel(fingerprint: node.fingerprint, icon: "arrow.triangle.branch")
         case .destination(let record):
-            let fingerprint = record.destination?.fingerprint ?? "unknown"
-            hostLabel(fingerprint: fingerprint, icon: "mappin.and.ellipse",
-                      trailing: record.isForwarded ? "FORWARDED" : nil, subtitle: usage(record))
+            hostLabel(fingerprint: record.destination?.fingerprint ?? "unknown", icon: "mappin.and.ellipse")
         }
     }
 
-    private func hostLabel(fingerprint: String, icon: String, trailing: String?, subtitle: String? = nil) -> some View {
+    /// A single line: the name when the host is named (with an info icon
+    /// whose hover reveals the fingerprint), otherwise the fingerprint
+    /// itself.
+    private func hostLabel(fingerprint: String, icon: String) -> some View {
         let name = label(fingerprint)
+        let named = name != fingerprint
         return HStack(spacing: 6) {
             Image(systemName: icon).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    Text(name)
-                        .font(name == fingerprint ? .system(.caption, design: .monospaced) : .body)
-                        .textSelection(.enabled)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if let trailing {
-                        Text(trailing)
-                            .font(.caption2.bold())
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(.orange.opacity(0.25), in: RoundedRectangle(cornerRadius: 3))
-                    }
-                }
-                if name != fingerprint {
-                    Text(fingerprint)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                if let subtitle {
-                    Text(subtitle).font(.caption2).foregroundStyle(.secondary)
-                }
+            Text(name)
+                .font(named ? .body : .system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if named {
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help(fingerprint)
             }
-            NameButton(isNamed: name != fingerprint) { onName(fingerprint) }
+            NameButton(isNamed: named) { onName(fingerprint) }
         }
     }
 
@@ -298,11 +285,6 @@ private struct DestinationRowView: View {
         case .approved: Color.green.opacity(0.14)
         case .neutral: nil
         }
-    }
-
-    private func usage(_ record: DestinationRecord) -> String {
-        let uses = record.count == 1 ? "1 use" : "\(record.count) uses"
-        return "\(uses) · last \(record.lastUsed.formatted(.relative(presentation: .named)))"
     }
 
     private var approveHelp: String {
