@@ -23,19 +23,22 @@ struct KeyDetailView: View {
                 LabeledContent("Created", value: key.createdAt.formatted(date: .abbreviated, time: .shortened))
             }
 
-            Section {
+            Section("Approval") {
                 LabeledContent("Touch ID", value: key.authRequired ? "Required for every signature" : "Not required")
-                Toggle("Block forwarded requests", isOn: blockForwardedBinding)
-                if !key.authRequired {
-                    Toggle("Approve local requests without asking", isOn: autoApproveBinding)
+                Toggle(isOn: blockForwardedBinding) {
+                    settingLabel("Block forwarded requests",
+                                 "Denies every request that arrives through a forwarded agent connection, regardless of the destination's standing.")
                 }
-                Toggle("Lock to current destinations", isOn: lockedBinding)
-            } header: {
-                Text("Approval")
-            } footer: {
-                Text(approvalCaption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if !key.authRequired {
+                    Toggle(isOn: autoApproveBinding) {
+                        settingLabel("Approve local requests without asking",
+                                     "Signs local (non-forwarded) requests with no dialog or naming prompt. Forwarded requests still ask, and blocks always win.")
+                    }
+                }
+                Toggle(isOn: lockedBinding) {
+                    settingLabel("Lock to current destinations",
+                                 "Signs only for destinations you have already approved; everything else is denied without asking. Turn off to allow new destinations again.")
+                }
             }
 
             Section("Public key") {
@@ -97,15 +100,10 @@ struct KeyDetailView: View {
         }
     }
 
-    private var approvalCaption: String {
-        if key.locked {
-            "Locked: this key signs only for destinations you have already approved. Everything else is denied without asking. Turn off to allow new destinations again."
-        } else if key.authRequired {
-            "Touch ID is enforced by the Secure Enclave and cannot be bypassed or replaced by Sequester. Blocked destinations and blocked forwarded requests are denied before any prompt appears."
-        } else if key.autoApprove {
-            "This key signs local (non-forwarded) requests with no dialog and no naming prompt. Forwarded requests still ask, and blocked destinations are always denied."
-        } else {
-            "Sequester asks before each signature unless the destination is approved. Blocked destinations and blocked forwarded requests are denied without asking."
+    private func settingLabel(_ title: String, _ info: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+            InfoDot(text: info)
         }
     }
 
@@ -175,6 +173,7 @@ struct KeyDetailView: View {
 private struct InfoDot: View {
 
     let text: String
+    var monospaced: Bool = false
     @State private var shown = false
     @State private var hoverDelay: Task<Void, Never>?
 
@@ -196,8 +195,10 @@ private struct InfoDot: View {
             }
             .popover(isPresented: $shown) {
                 Text(text)
-                    .font(.system(.callout, design: .monospaced))
+                    .font(monospaced ? .system(.callout, design: .monospaced) : .callout)
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: monospaced ? nil : 280, alignment: .leading)
                     .padding(12)
             }
     }
@@ -293,7 +294,7 @@ private struct DestinationRowView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             if named {
-                InfoDot(text: fingerprint)
+                InfoDot(text: fingerprint, monospaced: true)
             }
             NameButton(isNamed: named) { onName(fingerprint) }
         }
