@@ -71,7 +71,7 @@ Host myserver
 
 ## Building
 
-Requires Xcode command line tools and a Developer ID certificate.
+Requires macOS 26 or later, the Xcode 26 command line tools, and a Developer ID certificate.
 
 ```
 make build      # signed bundle in .build/Sequester.app
