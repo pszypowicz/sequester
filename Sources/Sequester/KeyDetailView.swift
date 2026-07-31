@@ -33,18 +33,17 @@ struct KeyDetailView: View {
 
             Section {
                 if key.destinations.isEmpty {
-                    Text("No requests observed yet. Destinations appear here as the key gets used, each one the exact path a request took.")
+                    Text("No requests observed yet. Destinations appear here as the key gets used, each one the exact path a request took, with forwarding hops as branches.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(key.destinations.sorted { $0.lastUsed > $1.lastUsed }) { record in
-                        DestinationRow(
-                            record: record,
+                    ForEach(DestinationTree.build(key.destinations)) { node in
+                        DestinationNodeView(
+                            node: node,
                             allowApprove: !key.authRequired,
-                            onState: { state in store.setDestinationState(name: key.name, id: record.id, state: state) },
-                            onDelete: { store.removeDestination(name: key.name, id: record.id) }
+                            onState: { id, state in store.setDestinationState(name: key.name, id: id, state: state) },
+                            onDelete: { id in store.removeDestination(name: key.name, id: id) }
                         )
-                        .listRowBackground(rowBackground(record.state))
                     }
                 }
             } header: {
@@ -92,18 +91,65 @@ struct KeyDetailView: View {
         )
     }
 
-    private func rowBackground(_ state: DestinationState) -> Color? {
-        switch state {
-        case .blocked: Color.red.opacity(0.14)
-        case .approved: Color.green.opacity(0.14)
-        case .neutral: nil
+}
+
+/// One tree node: a bare record row for leaves, a disclosure branch for
+/// hops, with a merged host's direct-use record as the branch's first row.
+private struct DestinationNodeView: View {
+
+    let node: DestinationTree.Node
+    let allowApprove: Bool
+    let onState: (String, DestinationState) -> Void
+    let onDelete: (String) -> Void
+
+    @State private var expanded = true
+
+    var body: some View {
+        if node.children.isEmpty, let record = node.record {
+            DestinationRecordRow(
+                record: record,
+                allowApprove: allowApprove,
+                onState: { onState(record.id, $0) },
+                onDelete: { onDelete(record.id) }
+            )
+        } else {
+            DisclosureGroup(isExpanded: $expanded) {
+                if let record = node.record {
+                    DestinationRecordRow(
+                        record: record,
+                        allowApprove: allowApprove,
+                        onState: { onState(record.id, $0) },
+                        onDelete: { onDelete(record.id) }
+                    )
+                }
+                ForEach(node.children) { child in
+                    DestinationNodeView(
+                        node: child,
+                        allowApprove: allowApprove,
+                        onState: onState,
+                        onDelete: onDelete
+                    )
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .foregroundStyle(.secondary)
+                    Text(node.fingerprint)
+                        .font(.system(.caption, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(node.algorithm)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }
 
 /// One observed signing path: destination, route, usage stats, and the
 /// standing controls (approve only where the app dialog is the gate).
-private struct DestinationRow: View {
+private struct DestinationRecordRow: View {
 
     let record: DestinationRecord
     let allowApprove: Bool
@@ -127,7 +173,7 @@ private struct DestinationRow: View {
                             .background(.orange.opacity(0.25), in: RoundedRectangle(cornerRadius: 3))
                     }
                 }
-                Text(routeDescription)
+                Text(usageDescription)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -146,22 +192,21 @@ private struct DestinationRow: View {
             .help("Forget this destination")
         }
         .padding(.vertical, 2)
+        .listRowBackground(rowBackground)
     }
 
-    private var routeDescription: String {
-        let route: String
-        if record.hops.count > 1 {
-            let via = record.hops.dropLast().map { shortFingerprint($0.fingerprint) }.joined(separator: ", ")
-            route = "via \(via)"
-        } else {
-            route = record.isForwarded ? "forwarded" : "local"
+    private var rowBackground: Color? {
+        switch record.state {
+        case .blocked: Color.red.opacity(0.14)
+        case .approved: Color.green.opacity(0.14)
+        case .neutral: nil
         }
+    }
+
+    private var usageDescription: String {
+        let route = record.isForwarded ? "forwarded" : "local"
         let uses = record.count == 1 ? "1 use" : "\(record.count) uses"
         return "\(route) · \(uses) · last \(record.lastUsed.formatted(.relative(presentation: .named)))"
-    }
-
-    private func shortFingerprint(_ fingerprint: String) -> String {
-        String(fingerprint.replacingOccurrences(of: "SHA256:", with: "").prefix(12))
     }
 
     private func stateButton(_ state: DestinationState, icon: String, tint: Color, help: String) -> some View {
