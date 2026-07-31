@@ -17,37 +17,24 @@ struct NameHostSheet: View {
     @State private var name = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Form {
-                Section {
-                    TextField("Name", text: $name, prompt: Text("e.g. github"))
-                    LabeledContent("Host key") {
-                        Text(fingerprint)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
-                } footer: {
-                    Text("The name is shown wherever this host appears, for every key. Clearing it goes back to the fingerprint.")
-                        .font(.caption)
+        SheetScaffold(primaryTitle: "Save", size: CGSize(width: 460, height: 230)) {
+            hostNames.setName(name, for: fingerprint)
+            dismiss()
+        } content: {
+            Section {
+                TextField("Name", text: $name, prompt: Text("e.g. github"))
+                LabeledContent("Host key") {
+                    Text(fingerprint)
+                        .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
+            } footer: {
+                Text("The name is shown wherever this host appears, for every key. Clearing it goes back to the fingerprint.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .formStyle(.grouped)
-
-            Divider()
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                Button("Save") {
-                    hostNames.setName(name, for: fingerprint)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-            .padding()
         }
-        .frame(width: 460, height: 230)
         .onAppear {
             name = hostNames.name(for: fingerprint) ?? ""
         }

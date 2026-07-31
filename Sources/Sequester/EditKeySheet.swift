@@ -23,35 +23,18 @@ struct EditKeySheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Form {
-                Section {
-                    TextField("Name", text: $name)
-                    TextField("Description", text: $keyDescription, prompt: Text("optional"))
-                } footer: {
-                    Text("The public key filename is derived from the key itself, so renaming never breaks SSH config.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        SheetScaffold(primaryTitle: "Save", primaryDisabled: name.isEmpty,
+                      error: errorMessage, size: CGSize(width: 420, height: 220),
+                      onPrimary: save) {
+            Section {
+                TextField("Name", text: $name)
+                TextField("Description", text: $keyDescription, prompt: Text("optional"))
+            } footer: {
+                Text("The public key filename is derived from the key itself, so renaming never breaks SSH config.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .formStyle(.grouped)
-
-            Divider()
-            HStack {
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                Button("Save") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(name.isEmpty)
-            }
-            .padding()
         }
-        .frame(width: 420, height: 220)
     }
 
     private func save() {

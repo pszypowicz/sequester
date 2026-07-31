@@ -29,8 +29,12 @@ dev: build
 dev-stop:
 	-killall Sequester 2>/dev/null
 
+# Build, sign, notarize, staple, and produce the notarized Sequester.zip.
+release:
+	bash scripts/notarize-release.sh
+
 # Stream the app's unified log output, including debug-level messages.
 logs:
 	log stream --predicate 'subsystem == "cz.szypowi.sequester"' --level debug --style compact
 
-.PHONY: build build-adhoc install uninstall test dev dev-stop logs
+.PHONY: build build-adhoc install uninstall test dev dev-stop release logs

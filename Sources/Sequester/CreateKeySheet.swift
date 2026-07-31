@@ -12,38 +12,21 @@ struct CreateKeySheet: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Form {
-                Section {
-                    TextField("Name", text: $name, prompt: Text("e.g. github"))
-                    TextField("Description", text: $keyDescription, prompt: Text("optional"))
-                }
-                Section {
-                    Toggle("Require Touch ID for every signature", isOn: $authRequired)
-                } footer: {
-                    Text("The Touch ID requirement is baked into the key at creation and is permanent. Name and description can be changed anytime; the public key filename is derived from the key itself, so renaming never breaks SSH config. Approval settings live on the key's page.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        SheetScaffold(primaryTitle: "Create", primaryDisabled: name.isEmpty,
+                      error: errorMessage, size: CGSize(width: 460, height: 340),
+                      onPrimary: create) {
+            Section {
+                TextField("Name", text: $name, prompt: Text("e.g. github"))
+                TextField("Description", text: $keyDescription, prompt: Text("optional"))
             }
-            .formStyle(.grouped)
-
-            Divider()
-            HStack {
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                Button("Create") { create() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(name.isEmpty)
+            Section {
+                Toggle("Require Touch ID for every signature", isOn: $authRequired)
+            } footer: {
+                Text("The Touch ID requirement is baked into the key at creation and is permanent. Name and description can be changed anytime; the public key filename is derived from the key itself, so renaming never breaks SSH config. Approval settings live on the key's page.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .padding()
         }
-        .frame(width: 460, height: 340)
     }
 
     private func create() {
