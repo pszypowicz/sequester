@@ -32,7 +32,7 @@ done
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-scripts/bundle.sh --identity "Developer ID Application"
+bash scripts/bundle.sh --identity "Developer ID Application"
 
 app=".build/Sequester.app"
 zip=".build/Sequester.zip"
