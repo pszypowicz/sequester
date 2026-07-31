@@ -6,19 +6,31 @@ struct SequesterApp: App {
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store = KeyStore()
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
 
     init() {
         SelftestCLI.runIfRequested()
     }
 
     var body: some Scene {
-        Window("Sequester", id: "main") {
+        Window("Sequester Settings", id: "main") {
             KeyListView()
                 .environment(store)
+                .environment(appDelegate.agentStatus)
+                .onAppear {
+                    // Whatever path opened the window, present it like a
+                    // regular app: with a menu bar and a Dock icon. The
+                    // delegate drops back to accessory on close.
+                    NSApp.setActivationPolicy(.regular)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
         }
         .defaultSize(width: 720, height: 440)
+        // Launching (e.g. at login) starts only the agent and the menu bar
+        // icon. Relaunching while running reopens this window instead.
+        .defaultLaunchBehavior(.suppressed)
 
-        MenuBarExtra("Sequester", systemImage: "key.fill") {
+        MenuBarExtra("Sequester", systemImage: "key.fill", isInserted: $showMenuBarIcon) {
             MenuContent()
                 .environment(store)
                 .environment(appDelegate.agentStatus)

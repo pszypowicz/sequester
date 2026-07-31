@@ -7,7 +7,8 @@ import SequesterCore
 struct DialogApprover: SigningApprover {
 
     func approve(keyName: String, provenance: Provenance, bindings: [SessionBinding]) async -> Bool {
-        await MainActor.run {
+        Log.app.log("Approval dialog for key \(keyName, privacy: .public), requester \(provenance.displayName, privacy: .public)")
+        let allowed = await MainActor.run {
             NSApp.activate(ignoringOtherApps: true)
             let alert = NSAlert()
             alert.alertStyle = .warning
@@ -17,6 +18,8 @@ struct DialogApprover: SigningApprover {
             alert.addButton(withTitle: "Deny")
             return alert.runModal() == .alertFirstButtonReturn
         }
+        Log.app.log("Approval dialog result for \(keyName, privacy: .public): \(allowed ? "allowed" : "denied", privacy: .public)")
+        return allowed
     }
 
     private static func details(provenance: Provenance, bindings: [SessionBinding]) -> String {

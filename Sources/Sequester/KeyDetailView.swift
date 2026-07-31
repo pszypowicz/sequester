@@ -6,25 +6,27 @@ struct KeyDetailView: View {
     @Environment(KeyStore.self) private var store
 
     let key: KeyMetadata
+    @Binding var selection: String?
+    @State private var nameDraft: String
     @State private var descriptionDraft: String
     @State private var confirmDelete = false
     @State private var errorMessage: String?
 
-    init(key: KeyMetadata) {
+    init(key: KeyMetadata, selection: Binding<String?>) {
         self.key = key
+        _selection = selection
+        _nameDraft = State(initialValue: key.name)
         _descriptionDraft = State(initialValue: key.keyDescription)
     }
 
     var body: some View {
         Form {
             Section {
-                LabeledContent("Name", value: key.name)
-                LabeledContent("Fingerprint", value: key.fingerprint)
-                LabeledContent("Created", value: key.createdAt.formatted(date: .abbreviated, time: .shortened))
-                LabeledContent("Touch ID", value: key.authRequired ? "Required for every signature" : "Not required")
-            }
-
-            Section {
+                TextField("Name", text: $nameDraft)
+                    .onSubmit(saveName)
+                if nameDraft != key.name {
+                    Button("Save Name", action: saveName)
+                }
                 TextField("Description", text: $descriptionDraft, prompt: Text("optional"))
                     .onSubmit(saveDescription)
                 if descriptionDraft != key.keyDescription {
@@ -37,7 +39,27 @@ struct KeyDetailView: View {
                 }
             }
 
+            Section {
+                LabeledContent("Created", value: key.createdAt.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("Touch ID", value: key.authRequired ? "Required for every signature" : "Not required")
+                LabeledContent("SHA256 fingerprint") {
+                    Text(key.fingerprint)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+                LabeledContent("MD5 fingerprint") {
+                    Text(key.fingerprintMD5)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+            }
+
             Section("Public key") {
+                LabeledContent("File") {
+                    Text(key.publicKeyFileURL.path)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
                 Text(key.publicKeyLine)
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
@@ -47,7 +69,7 @@ struct KeyDetailView: View {
                         copyToPasteboard(key.publicKeyLine)
                     }
                     Button("Copy File Path") {
-                        copyToPasteboard(SequesterPaths.publicKeyURL(name: key.name).path)
+                        copyToPasteboard(key.publicKeyFileURL.path)
                     }
                 }
             }
@@ -73,7 +95,7 @@ struct KeyDetailView: View {
                 attempt { try store.delete(name: key.name) }
             }
         } message: {
-            Text("The Secure Enclave key is destroyed and \(key.name).pub is removed. Hosts using this key will stop accepting logins. This cannot be undone.")
+            Text("The Secure Enclave key is destroyed and its public key file is removed. Hosts using this key will stop accepting logins. This cannot be undone.")
         }
     }
 
@@ -82,6 +104,14 @@ struct KeyDetailView: View {
             get: { key.policy },
             set: { newValue in attempt { try store.setPolicy(name: key.name, policy: newValue) } }
         )
+    }
+
+    private func saveName() {
+        let newName = nameDraft
+        attempt {
+            try store.rename(name: key.name, to: newName)
+            selection = newName
+        }
     }
 
     private func saveDescription() {

@@ -1,6 +1,8 @@
 # Sequester
 
-A macOS menu bar app that keeps SSH keys in the Secure Enclave and serves them to ssh through the standard agent protocol. Private keys are generated inside the Enclave and cannot be exported, so there is no key file on disk to steal or leak. Each key's public half is written to `~/.sequester/<name>.pub`, which means per-host `IdentityFile` entries in ssh config keep working exactly as they do with plain key files.
+> **Beta:** Sequester is pre-1.0. Backward compatibility is not guaranteed until version 1.0.0 is reached.
+
+A macOS menu bar app that keeps SSH keys in the Secure Enclave and serves them to ssh through the standard agent protocol. Private keys are generated inside the Enclave and cannot be exported, so there is no key file on disk to steal or leak. Each key's public half is written to `~/.sequester/` under a filename derived from the key material itself, which means per-host `IdentityFile` entries in ssh config keep working exactly as they do with plain key files and never break when a key is renamed.
 
 The idea and several implementation patterns come from [Secretive](https://github.com/maxgoedjen/secretive) (MIT). Sequester exists to add per-key signing behavior aimed at agent forwarding abuse. When you forward your agent to a remote host, a compromised host can request signatures with any of your keys and hop onward to other servers. Sequester lets each key declare how it behaves when that happens.
 
@@ -18,14 +20,14 @@ Early proof of concept. Working today:
 
 A key is created with four settings:
 
-| Setting              | Changeable later                                                                        |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| Name                 | No. It becomes the `.pub` filename and the on-disk contract your ssh config references. |
-| Touch ID requirement | No. It is baked into the key's access control by the Enclave at creation.               |
-| Description          | Yes                                                                                     |
-| Behavior             | Yes                                                                                     |
+| Setting              | Changeable later                                                          |
+| -------------------- | ------------------------------------------------------------------------- |
+| Name                 | Yes                                                                       |
+| Touch ID requirement | No. It is baked into the key's access control by the Enclave at creation. |
+| Description          | Yes                                                                       |
+| Behavior             | Yes                                                                       |
 
-Deleting a key destroys it permanently. There is no export, because there is nothing exportable.
+The on-disk `.pub` filename is derived from a hash of the key material, so it is stable for the life of the key. The file is the contract ssh config references; the name is a label. Deleting a key destroys it permanently. There is no export, because there is nothing exportable.
 
 ## Behavior modes
 
@@ -44,7 +46,7 @@ Host *
 
 Host myserver
     HostName myserver.example.com
-    IdentityFile ~/.sequester/<name>.pub
+    IdentityFile ~/.sequester/<key file>.pub
     IdentitiesOnly yes
 ```
 
@@ -67,6 +69,22 @@ make test       # unit tests
 ```
 
 `scripts/bundle.sh --identity adhoc` produces an unsigned local build. `scripts/agent-e2e.py` exercises the running agent end to end over the socket, and the app binary accepts a hidden `--selftest` flag that checks Enclave and keychain access headlessly.
+
+## Debugging
+
+The app logs to the unified logging system under the subsystem `cz.szypowi.sequester`, with categories `agent` (protocol events, sign decisions), `server` (socket lifecycle, connection provenance), `store` (key CRUD and Enclave operations), and `app` (launch, approval dialogs, login item). Stream it live with
+
+```
+make logs
+```
+
+or directly:
+
+```
+log stream --predicate 'subsystem == "cz.szypowi.sequester"' --level debug --style compact
+```
+
+For past events use `log show --last 1h --predicate 'subsystem == "cz.szypowi.sequester"'`, or filter for the subsystem in Console.app. Key names, fingerprints, and requesting process names are logged with public privacy so the log stays readable; no secret material passes through any log line.
 
 ## License
 

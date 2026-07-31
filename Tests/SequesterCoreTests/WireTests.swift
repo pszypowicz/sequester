@@ -98,6 +98,14 @@ import CryptoKit
         #expect(fingerprint.hasPrefix("SHA256:"))
         #expect(!fingerprint.hasSuffix("="))
     }
+
+    @Test func fingerprintMD5Format() {
+        let fingerprint = OpenSSH.fingerprintMD5(blob: Data("blob".utf8))
+        #expect(fingerprint.hasPrefix("MD5:"))
+        let hex = fingerprint.dropFirst(4).split(separator: ":")
+        #expect(hex.count == 16)
+        #expect(hex.allSatisfy { $0.count == 2 })
+    }
 }
 
 @Suite struct AgentProtocolTests {

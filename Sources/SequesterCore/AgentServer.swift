@@ -19,7 +19,6 @@ public enum AgentServerError: LocalizedError {
 /// the payload.
 public final class AgentServer: @unchecked Sendable {
 
-    private static let logger = Logger(subsystem: "cz.szypowi.sequester", category: "AgentServer")
     private static let maxMessageSize: UInt32 = 1 << 20
 
     private let socketPath: String
@@ -72,7 +71,7 @@ public final class AgentServer: @unchecked Sendable {
 
         listenFD = fd
         acceptQueue.async { [weak self] in self?.acceptLoop(listenFD: fd) }
-        Self.logger.log("Agent listening at \(self.socketPath)")
+        Log.server.log("Agent listening at \(self.socketPath, privacy: .public)")
     }
 
     public func stop() {
@@ -81,6 +80,7 @@ public final class AgentServer: @unchecked Sendable {
             listenFD = -1
         }
         unlink(socketPath)
+        Log.server.log("Agent stopped")
     }
 
     private func acceptLoop(listenFD: Int32) {
@@ -88,7 +88,7 @@ public final class AgentServer: @unchecked Sendable {
             let fd = accept(listenFD, nil, nil)
             guard fd >= 0 else {
                 if errno == EINTR { continue }
-                Self.logger.log("Accept loop ending: \(Self.errnoString())")
+                Log.server.log("Accept loop ending: \(Self.errnoString(), privacy: .public)")
                 return
             }
             var noSigpipe: Int32 = 1
@@ -101,8 +101,12 @@ public final class AgentServer: @unchecked Sendable {
     }
 
     private static func handleConnection(fd: Int32, agent: Agent) {
-        defer { close(fd) }
         let session = AgentSession(provenance: ProvenanceTracer.provenance(socket: fd))
+        Log.server.debug("Connection opened by \(session.provenance.displayName, privacy: .public) (pid \(session.provenance.pid, privacy: .public), \(session.provenance.path ?? "unknown path", privacy: .public))")
+        defer {
+            close(fd)
+            Log.server.debug("Connection from \(session.provenance.displayName, privacy: .public) closed")
+        }
         while true {
             guard let header = readExactly(fd: fd, count: 4) else { return }
             let length = header.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian }

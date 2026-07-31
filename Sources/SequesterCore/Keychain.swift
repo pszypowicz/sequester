@@ -100,6 +100,27 @@ public enum KeyStorage {
         return (data, metadata)
     }
 
+    /// Moves an item to a new account (the key's new name), updating the
+    /// label and metadata with it. The keychain enforces name uniqueness.
+    public static func rename(from oldName: String, metadata: KeyMetadata) throws {
+        let update: [CFString: Any] = [
+            kSecAttrAccount: metadata.name,
+            kSecAttrLabel: "Sequester: \(metadata.name)",
+            kSecAttrGeneric: try JSONEncoder().encode(metadata),
+        ]
+        let status = SecItemUpdate(baseQuery(name: oldName) as CFDictionary, update as CFDictionary)
+        switch status {
+        case errSecSuccess:
+            return
+        case errSecItemNotFound:
+            throw KeychainError.notFound(oldName)
+        case errSecDuplicateItem:
+            throw KeychainError.duplicate(metadata.name)
+        default:
+            throw KeychainError.status(status)
+        }
+    }
+
     public static func updateMetadata(_ metadata: KeyMetadata) throws {
         let update: [CFString: Any] = [
             kSecAttrGeneric: try JSONEncoder().encode(metadata),

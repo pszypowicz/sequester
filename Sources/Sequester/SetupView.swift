@@ -1,8 +1,13 @@
 import SwiftUI
 import SequesterCore
 
-/// Shown when no key is selected: how to point ssh at the agent.
+/// The first page of settings, shown when no key is selected: agent state,
+/// app options, and how to point ssh at the agent.
 struct SetupView: View {
+
+    @Environment(AgentStatus.self) private var agentStatus
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
+    @State private var loginEnabled = LoginItem.isEnabled
 
     private var snippet: String {
         """
@@ -11,34 +16,79 @@ struct SetupView: View {
 
         Host myserver
             HostName myserver.example.com
-            IdentityFile \(SequesterPaths.directory.path)/<name>.pub
+            IdentityFile \(SequesterPaths.directory.path)/<key file>.pub
             IdentitiesOnly yes
         """
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Setup")
-                .font(.title2.bold())
-            Text("Point ssh at the agent socket in ~/.ssh/config. Each key's public half lives at ~/.sequester/<name>.pub, so per-host IdentityFile entries work the same way they do with plain key files.")
-                .foregroundStyle(.secondary)
-            GroupBox {
+        Form {
+            Section("Agent") {
+                LabeledContent("Status") {
+                    if agentStatus.running {
+                        Label("Running", systemImage: "circle.fill")
+                            .foregroundStyle(.green)
+                    } else {
+                        Label(agentStatus.error ?? "Not running", systemImage: "circle.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
+                LabeledContent("Socket") {
+                    HStack {
+                        Text(SequesterPaths.socketURL.path)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                        Button("Copy") {
+                            copyToPasteboard(SequesterPaths.socketURL.path)
+                        }
+                    }
+                }
+            }
+
+            Section("App") {
+                Toggle("Start at login", isOn: $loginEnabled)
+                    .onChange(of: loginEnabled) { _, enabled in
+                        do {
+                            try LoginItem.setEnabled(enabled)
+                        } catch {
+                            loginEnabled = LoginItem.isEnabled
+                        }
+                    }
+                Toggle("Show menu bar icon", isOn: $showMenuBarIcon)
+                if !showMenuBarIcon {
+                    Text("With the icon hidden, open the app again (Finder, Spotlight, or Launchpad) to get back to settings.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("ssh config") {
+                Text("Add this to ~/.ssh/config. Each key's public half lives in ~/.sequester under a filename derived from the key itself (copy the exact path from the key's page), so per-host IdentityFile entries work the same way they do with plain key files and survive renames.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(snippet)
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(4)
+                Button("Copy Config Snippet") {
+                    copyToPasteboard(snippet)
+                }
             }
-            Button("Copy Config Snippet") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(snippet, forType: .string)
+
+            Section {
+                Text("Sequester \(BuildMetadata.version) (\(BuildMetadata.gitHash))")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
-            Spacer()
-            Text("Sequester \(BuildMetadata.version) (\(BuildMetadata.gitHash))")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .formStyle(.grouped)
+        .onAppear {
+            loginEnabled = LoginItem.isEnabled
+        }
+    }
+
+    private func copyToPasteboard(_ string: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
     }
 }

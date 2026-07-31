@@ -21,9 +21,10 @@ public enum SigningPolicy: String, Codable, CaseIterable, Sendable {
 /// material itself. Stored as JSON in the keychain item's generic attribute.
 public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
 
-    /// Immutable; doubles as the on-disk public key filename
-    /// (~/.sequester/<name>.pub), so ssh config references never break.
-    public let name: String
+    /// Renameable presentation label. The on-disk .pub filename is derived
+    /// from the key material instead, so ssh config references survive
+    /// renames.
+    public var name: String
     public var keyDescription: String
     /// Whether the Enclave demands user presence per signature. Baked into
     /// the key's access control at creation and unchangeable afterwards.
@@ -56,6 +57,19 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
 
     public var fingerprint: String {
         OpenSSH.fingerprintSHA256(blob: publicKeyBlob)
+    }
+
+    public var fingerprintMD5: String {
+        OpenSSH.fingerprintMD5(blob: publicKeyBlob)
+    }
+
+    /// Stable stem of the on-disk public key file, derived from the key.
+    public var publicKeyFileStem: String {
+        OpenSSH.fileStem(blob: publicKeyBlob)
+    }
+
+    public var publicKeyFileURL: URL {
+        SequesterPaths.publicKeyURL(stem: publicKeyFileStem)
     }
 
     public var publicKeyLine: String {

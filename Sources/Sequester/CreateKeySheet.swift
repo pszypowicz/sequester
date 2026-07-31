@@ -27,7 +27,7 @@ struct CreateKeySheet: View {
                         }
                     }
                 } footer: {
-                    Text("The name becomes the public key filename (~/.sequester/\(name.isEmpty ? "<name>" : name).pub) and cannot be changed later. The Touch ID requirement is baked into the key at creation and is also permanent. Description and behavior can be changed anytime.")
+                    Text("The Touch ID requirement is baked into the key at creation and is permanent. Name, description, and behavior can be changed anytime; the public key filename is derived from the key itself, so renaming never breaks ssh config.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

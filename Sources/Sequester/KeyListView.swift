@@ -22,14 +22,6 @@ struct KeyListView: View {
                 .padding(.vertical, 2)
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 220)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("New Key", systemImage: "plus") {
-                        showCreate = true
-                    }
-                    .disabled(!store.enclaveAvailable)
-                }
-            }
             .overlay {
                 if store.keys.isEmpty {
                     ContentUnavailableView(
@@ -39,9 +31,22 @@ struct KeyListView: View {
                     )
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    showCreate = true
+                } label: {
+                    Label("New Key", systemImage: "plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(!store.enclaveAvailable)
+                .padding(12)
+            }
         } detail: {
-            if let selection, let key = store.keys.first(where: { $0.name == selection }) {
-                KeyDetailView(key: key)
+            if let selected = selection, let key = store.keys.first(where: { $0.name == selected }) {
+                KeyDetailView(key: key, selection: $selection)
                     .id(key.name)
             } else {
                 SetupView()

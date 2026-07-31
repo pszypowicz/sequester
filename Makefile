@@ -22,4 +22,8 @@ dev: build
 dev-stop:
 	-killall Sequester 2>/dev/null
 
-.PHONY: build install uninstall test dev dev-stop
+# Stream the app's unified log output, including debug-level messages.
+logs:
+	log stream --predicate 'subsystem == "cz.szypowi.sequester"' --level debug --style compact
+
+.PHONY: build install uninstall test dev dev-stop logs

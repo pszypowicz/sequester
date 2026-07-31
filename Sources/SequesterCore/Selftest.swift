@@ -70,9 +70,13 @@ public enum Selftest {
                 throw KeychainError.corruptItem
             }
         }
+        check("rename") {
+            try EnclaveKeyStore.rename(name: temporaryKeyName, to: "selftest-renamed")
+            try EnclaveKeyStore.rename(name: "selftest-renamed", to: temporaryKeyName)
+        }
         check("public key file") {
-            let url = SequesterPaths.publicKeyURL(name: temporaryKeyName)
-            let line = try String(contentsOf: url, encoding: .utf8)
+            let metadata = try KeyStorage.load(name: temporaryKeyName).metadata
+            let line = try String(contentsOf: metadata.publicKeyFileURL, encoding: .utf8)
             guard line.hasPrefix("\(OpenSSH.p256Identifier) ") else {
                 throw KeychainError.corruptItem
             }
@@ -94,7 +98,7 @@ public enum Selftest {
                 authRequired: false, policy: .allowLocalAskForwarded
             )
             print("created \(metadata.name) \(metadata.fingerprint)")
-            print(SequesterPaths.publicKeyURL(name: name).path)
+            print(metadata.publicKeyFileURL.path)
             return 0
         } catch {
             print("FAIL create \(name): \(error.localizedDescription)")

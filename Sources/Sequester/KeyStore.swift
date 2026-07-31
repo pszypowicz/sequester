@@ -34,6 +34,11 @@ final class KeyStore {
         reload()
     }
 
+    func rename(name: String, to newName: String) throws {
+        try EnclaveKeyStore.rename(name: name, to: newName)
+        reload()
+    }
+
     func setPolicy(name: String, policy: SigningPolicy) throws {
         try EnclaveKeyStore.updatePolicy(name: name, policy: policy)
         reload()

@@ -7,30 +7,30 @@ struct MenuContent: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button("Open Sequester") {
-            openWindow(id: "main")
-            NSApp.activate(ignoringOtherApps: true)
-        }
-
-        Divider()
-
         if agentStatus.running {
             Text("Agent: running")
         } else {
             Text("Agent: \(agentStatus.error ?? "not running")")
         }
-        Button("Copy Socket Path") {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(SequesterPaths.socketURL.path, forType: .string)
-        }
 
         Divider()
+
+        Button("Settings…", systemImage: "gearshape") {
+            NSApp.setActivationPolicy(.regular)
+            openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
+        }
 
         Toggle("Start at Login", isOn: loginBinding)
 
         Divider()
 
-        Button("Quit Sequester") {
+        Button("About Sequester", systemImage: "info.circle") {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.orderFrontStandardAboutPanel(nil)
+        }
+
+        Button("Quit Sequester", systemImage: "power") {
             NSApp.terminate(nil)
         }
     }

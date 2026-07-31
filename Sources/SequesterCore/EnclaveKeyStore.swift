@@ -14,8 +14,8 @@ public enum SequesterPaths {
         directory.appending(path: "agent.sock")
     }
 
-    public static func publicKeyURL(name: String) -> URL {
-        directory.appending(path: "\(name).pub")
+    public static func publicKeyURL(stem: String) -> URL {
+        directory.appending(path: "\(stem).pub")
     }
 
     public static func ensureDirectory() throws {
@@ -75,6 +75,7 @@ public enum EnclaveKeyStore {
         )
         try KeyStorage.save(dataRepresentation: key.dataRepresentation, metadata: metadata)
         try writePublicKeyFile(metadata)
+        Log.store.log("Created key \(name, privacy: .public) (\(metadata.fingerprint, privacy: .public)), Touch ID \(authRequired, privacy: .public), policy \(policy.rawValue, privacy: .public)")
         return metadata
     }
 
@@ -91,6 +92,21 @@ public enum EnclaveKeyStore {
         var metadata = try KeyStorage.load(name: name).metadata
         metadata.keyDescription = description
         try KeyStorage.updateMetadata(metadata)
+        Log.store.log("Updated description of \(name, privacy: .public)")
+        return metadata
+    }
+
+    /// Renaming touches only the keychain item and the .pub comment; the
+    /// .pub filename is derived from the key and stays put.
+    @discardableResult
+    public static func rename(name: String, to newName: String) throws -> KeyMetadata {
+        guard newName != name else { return try KeyStorage.load(name: name).metadata }
+        try KeyName.validate(newName)
+        var metadata = try KeyStorage.load(name: name).metadata
+        metadata.name = newName
+        try KeyStorage.rename(from: name, metadata: metadata)
+        try writePublicKeyFile(metadata)
+        Log.store.log("Renamed key \(name, privacy: .public) to \(newName, privacy: .public)")
         return metadata
     }
 
@@ -99,12 +115,15 @@ public enum EnclaveKeyStore {
         var metadata = try KeyStorage.load(name: name).metadata
         metadata.policy = policy
         try KeyStorage.updateMetadata(metadata)
+        Log.store.log("Updated policy of \(name, privacy: .public) to \(policy.rawValue, privacy: .public)")
         return metadata
     }
 
     public static func delete(name: String) throws {
+        let metadata = try KeyStorage.load(name: name).metadata
         try KeyStorage.delete(name: name)
-        try? FileManager.default.removeItem(at: SequesterPaths.publicKeyURL(name: name))
+        try? FileManager.default.removeItem(at: metadata.publicKeyFileURL)
+        Log.store.log("Deleted key \(name, privacy: .public)")
     }
 
     /// Signs data the SSH way for ecdsa-sha2-nistp256: SHA-256 digest,
@@ -112,6 +131,7 @@ public enum EnclaveKeyStore {
     /// authRequired trigger the Enclave's own Touch ID prompt here.
     public static func sign(name: String, data: Data, reason: String) throws -> Data {
         let stored = try KeyStorage.load(name: name)
+        Log.store.debug("Signing \(data.count, privacy: .public) bytes with \(name, privacy: .public), Touch ID \(stored.metadata.authRequired, privacy: .public)")
         let context = LAContext()
         context.localizedReason = reason
         let key = try SecureEnclave.P256.Signing.PrivateKey(
@@ -123,8 +143,31 @@ public enum EnclaveKeyStore {
 
     public static func writePublicKeyFile(_ metadata: KeyMetadata) throws {
         try SequesterPaths.ensureDirectory()
-        let url = SequesterPaths.publicKeyURL(name: metadata.name)
+        let url = metadata.publicKeyFileURL
         try Data((metadata.publicKeyLine + "\n").utf8).write(to: url)
         try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+        Log.store.debug("Wrote \(url.path, privacy: .public)")
+    }
+
+    /// Reconciles ~/.sequester with the keychain: every key gets its
+    /// current .pub file (content includes the comment, which follows the
+    /// name), and .pub files with no matching key are removed. The
+    /// directory is app-managed, so stray .pub files are treated as stale,
+    /// never as user data.
+    public static func syncPublicKeyFiles() {
+        let keys = list()
+        for key in keys {
+            let line = key.publicKeyLine + "\n"
+            let existing = try? String(contentsOf: key.publicKeyFileURL, encoding: .utf8)
+            if existing != line {
+                try? writePublicKeyFile(key)
+            }
+        }
+        let expected = Set(keys.map { "\($0.publicKeyFileStem).pub" })
+        let contents = (try? FileManager.default.contentsOfDirectory(atPath: SequesterPaths.directory.path)) ?? []
+        for file in contents where file.hasSuffix(".pub") && !expected.contains(file) {
+            try? FileManager.default.removeItem(at: SequesterPaths.directory.appending(path: file))
+            Log.store.log("Removed stale public key file \(file, privacy: .public)")
+        }
     }
 }

@@ -45,10 +45,26 @@ public enum OpenSSH {
         return "SHA256:\(b64)"
     }
 
+    /// The legacy OpenSSH fingerprint: colon-separated MD5 hex pairs, as
+    /// shown by `ssh-keygen -l -E md5`. Old servers and UIs still display
+    /// this format, so it is offered for comparison only.
+    public static func fingerprintMD5(blob: Data) -> String {
+        let digest = Insecure.MD5.hash(data: blob)
+        return "MD5:" + digest.map { String(format: "%02x", $0) }.joined(separator: ":")
+    }
+
     /// The algorithm identifier at the head of a key blob, e.g.
     /// "ssh-ed25519" from a session-bind host key.
     public static func blobAlgorithm(_ blob: Data) -> String? {
         var reader = SSHWireReader(blob)
         return try? reader.readUTF8String()
+    }
+
+    /// A filesystem-safe stem derived from the key itself (first 16 hex
+    /// chars of the blob's SHA256). Used for the on-disk .pub filename so
+    /// it stays stable across renames: the file is the contract ssh config
+    /// references, the name is presentation.
+    public static func fileStem(blob: Data) -> String {
+        SHA256.hash(data: blob).prefix(8).map { String(format: "%02x", $0) }.joined()
     }
 }

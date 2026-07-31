@@ -50,8 +50,6 @@ public struct Agent: Sendable {
         static let signResponse: UInt8 = 14
     }
 
-    private static let logger = Logger(subsystem: "cz.szypowi.sequester", category: "Agent")
-
     private let approver: any SigningApprover
 
     public init(approver: any SigningApprover) {
@@ -69,13 +67,14 @@ public struct Agent: Sendable {
         case .protocolExtension:
             return handleExtension(reader: &reader, session: session)
         case nil:
-            Self.logger.debug("Unhandled agent message type \(rawType)")
+            Log.agent.log("Unhandled agent message type \(rawType, privacy: .public)")
             return Response.failure
         }
     }
 
     private func identitiesAnswer() -> Data {
         let keys = EnclaveKeyStore.list()
+        Log.agent.debug("Listing \(keys.count, privacy: .public) identities")
         var payload = Data([Response.identitiesAnswer])
         payload.append(SSHWire.uint32(UInt32(keys.count)))
         for key in keys {
@@ -91,20 +90,23 @@ public struct Agent: Sendable {
             return Response.failure
         }
         guard let key = EnclaveKeyStore.find(publicKeyBlob: keyBlob) else {
-            Self.logger.log("Sign request for unknown key from \(session.provenance.displayName)")
+            Log.agent.log("Sign request for unknown key from \(session.provenance.displayName, privacy: .public)")
             return Response.failure
         }
 
-        if requiresApproval(policy: key.policy, session: session) {
+        let needsApproval = requiresApproval(policy: key.policy, session: session)
+        Log.agent.log("Sign request: key \(key.name, privacy: .public), requester \(session.provenance.displayName, privacy: .public) (pid \(session.provenance.pid, privacy: .public)), policy \(key.policy.rawValue, privacy: .public), forwarded \(session.isForwarded, privacy: .public), bindings \(session.bindings.count, privacy: .public), approval needed \(needsApproval, privacy: .public)")
+        if needsApproval {
             let allowed = await approver.approve(
                 keyName: key.name,
                 provenance: session.provenance,
                 bindings: session.bindings
             )
             guard allowed else {
-                Self.logger.log("Denied signature with \(key.name) for \(session.provenance.displayName)")
+                Log.agent.log("Denied signature with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
                 return Response.failure
             }
+            Log.agent.log("User approved signature with \(key.name, privacy: .public)")
         }
 
         do {
@@ -113,14 +115,14 @@ public struct Agent: Sendable {
                 data: dataToSign,
                 reason: "sign an SSH request from \(session.provenance.displayName) with key \"\(key.name)\""
             )
-            Self.logger.log("Signed with \(key.name) for \(session.provenance.displayName)")
+            Log.agent.log("Signed with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
             var payload = Data([Response.signResponse])
             payload.append(SSHWire.lengthPrefixed(OpenSSH.p256SignatureBlob(rawSignature: raw)))
             return payload
         } catch {
             // Touch ID cancellation lands here too; a failure response makes
             // the client report a clean "agent refused operation".
-            Self.logger.error("Signing with \(key.name) failed: \(error)")
+            Log.agent.error("Signing with \(key.name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             return Response.failure
         }
     }
@@ -131,7 +133,7 @@ public struct Agent: Sendable {
     private func handleExtension(reader: inout SSHWireReader, session: AgentSession) -> Data {
         guard let name = try? reader.readUTF8String() else { return Response.failure }
         guard name == "session-bind@openssh.com" else {
-            Self.logger.debug("Unsupported agent extension \(name)")
+            Log.agent.log("Unsupported agent extension \(name, privacy: .public)")
             return Response.failure
         }
         guard let hostKeyBlob = try? reader.readString(),
@@ -146,7 +148,7 @@ public struct Agent: Sendable {
             isForwarding: forwardingByte != 0
         )
         session.bindings.append(binding)
-        Self.logger.log("Session bound to \(binding.hostKeyFingerprint), forwarding: \(binding.isForwarding)")
+        Log.agent.log("Session bound to \(binding.hostKeyFingerprint, privacy: .public) (\(binding.hostKeyAlgorithm, privacy: .public)), forwarding \(binding.isForwarding, privacy: .public), requester \(session.provenance.displayName, privacy: .public)")
         return Response.success
     }
 
