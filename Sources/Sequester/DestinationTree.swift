@@ -13,16 +13,16 @@ struct DestinationTree {
 
     struct Node: Identifiable {
         /// The route path (forwarding hops) from the root to this node.
-        let hops: [ChainHop]
+        let hops: [BindingHop]
         let fingerprint: String
         let algorithm: String
-        /// Records reached via exactly this route (chain == hops + [dest]).
+        /// Records reached via exactly this route (binding chain == hops + [dest]).
         var destinations: [DestinationRecord]
         /// Longer routes that continue through this node.
         var children: [Node]
         var latestActivity: Date
 
-        var id: String { "route:" + DestinationRecord.chainID(hops) }
+        var id: String { "route:" + DestinationRecord.bindingChainID(hops) }
     }
 
     /// Records reached directly, with no forwarding hop before them.
@@ -47,8 +47,8 @@ struct DestinationTree {
         )
     }
 
-    private static func insert(_ record: DestinationRecord, route: ArraySlice<ChainHop>,
-                               prefix: [ChainHop], into nodes: inout [Node]) {
+    private static func insert(_ record: DestinationRecord, route: ArraySlice<BindingHop>,
+                               prefix: [BindingHop], into nodes: inout [Node]) {
         guard let hop = route.first else { return }
         let hops = prefix + [hop]
         let index = nodes.firstIndex { $0.fingerprint == hop.fingerprint } ?? {

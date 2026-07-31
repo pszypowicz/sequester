@@ -193,10 +193,10 @@ import CryptoKit
         )
     }
 
-    private let local = ChainHop(fingerprint: "SHA256:aaa", algorithm: "ssh-ed25519", forwarding: false)
-    private let hop = ChainHop(fingerprint: "SHA256:vm1", algorithm: "ssh-ed25519", forwarding: true)
+    private let local = BindingHop(fingerprint: "SHA256:aaa", algorithm: "ssh-ed25519", forwarding: false)
+    private let hop = BindingHop(fingerprint: "SHA256:vm1", algorithm: "ssh-ed25519", forwarding: true)
 
-    private func record(_ hops: [ChainHop], _ state: DestinationState) -> DestinationRecord {
+    private func record(_ hops: [BindingHop], _ state: DestinationState) -> DestinationRecord {
         DestinationRecord(
             hops: hops, state: state,
             firstSeen: Date(timeIntervalSince1970: 0), lastUsed: Date(timeIntervalSince1970: 0), count: 1
@@ -204,38 +204,38 @@ import CryptoKit
     }
 
     @Test func unknownChainAsks() {
-        #expect(PolicyEngine.evaluate(key: makeKey(), chain: [local]) == .ask)
+        #expect(PolicyEngine.evaluate(key: makeKey(), bindingChain: [local]) == .ask)
     }
 
     @Test func emptyChainAsks() {
-        #expect(PolicyEngine.evaluate(key: makeKey(), chain: []) == .ask)
+        #expect(PolicyEngine.evaluate(key: makeKey(), bindingChain: []) == .ask)
     }
 
     @Test func blockForwardedDeniesForwardedOnly() {
         let key = makeKey(blockForwarded: true)
-        #expect(PolicyEngine.evaluate(key: key, chain: [hop, local]) == .deny)
-        #expect(PolicyEngine.evaluate(key: key, chain: [local]) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [hop, local]) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [local]) == .ask)
     }
 
     @Test func blockForwardedBeatsApprovedRecord() {
-        let chain = [hop, local]
-        let key = makeKey(blockForwarded: true, destinations: [record(chain, .approved)])
-        #expect(PolicyEngine.evaluate(key: key, chain: chain) == .deny)
+        let bindingChain = [hop, local]
+        let key = makeKey(blockForwarded: true, destinations: [record(bindingChain, .approved)])
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: bindingChain) == .deny)
     }
 
     @Test func recordStatesApply() {
-        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .approved)]), chain: [local]) == .allow)
-        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .blocked)]), chain: [local]) == .deny)
-        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .neutral)]), chain: [local]) == .ask)
+        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .approved)]), bindingChain: [local]) == .allow)
+        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .blocked)]), bindingChain: [local]) == .deny)
+        #expect(PolicyEngine.evaluate(key: makeKey(destinations: [record([local], .neutral)]), bindingChain: [local]) == .ask)
     }
 
     @Test func chainIdentityIncludesRoute() {
         let viaVM1 = [hop, local]
         let key = makeKey(destinations: [record(viaVM1, .approved)])
-        let viaVM2 = [ChainHop(fingerprint: "SHA256:vm2", algorithm: "ssh-ed25519", forwarding: true), local]
-        #expect(PolicyEngine.evaluate(key: key, chain: viaVM1) == .allow)
-        #expect(PolicyEngine.evaluate(key: key, chain: viaVM2) == .ask)
-        #expect(PolicyEngine.evaluate(key: key, chain: [local]) == .ask)
+        let viaVM2 = [BindingHop(fingerprint: "SHA256:vm2", algorithm: "ssh-ed25519", forwarding: true), local]
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: viaVM1) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: viaVM2) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [local]) == .ask)
     }
 
     @Test func metadataDecodesWithoutNewFields() throws {
@@ -253,9 +253,9 @@ import CryptoKit
 
 @Suite struct BranchRuleTests {
 
-    private let vm1 = ChainHop(fingerprint: "SHA256:vm1", algorithm: "ssh-ed25519", forwarding: true)
-    private let vm2 = ChainHop(fingerprint: "SHA256:vm2", algorithm: "ssh-ed25519", forwarding: true)
-    private let github = ChainHop(fingerprint: "SHA256:gh", algorithm: "ssh-ed25519", forwarding: false)
+    private let vm1 = BindingHop(fingerprint: "SHA256:vm1", algorithm: "ssh-ed25519", forwarding: true)
+    private let vm2 = BindingHop(fingerprint: "SHA256:vm2", algorithm: "ssh-ed25519", forwarding: true)
+    private let github = BindingHop(fingerprint: "SHA256:gh", algorithm: "ssh-ed25519", forwarding: false)
 
     private func makeKey(destinations: [DestinationRecord] = [], rules: [BranchRule] = [],
                          autoApprove: Bool = false, blockForwarded: Bool = false) -> KeyMetadata {
@@ -267,7 +267,7 @@ import CryptoKit
         )
     }
 
-    private func record(_ hops: [ChainHop], _ state: DestinationState) -> DestinationRecord {
+    private func record(_ hops: [BindingHop], _ state: DestinationState) -> DestinationRecord {
         DestinationRecord(
             hops: hops, state: state,
             firstSeen: Date(timeIntervalSince1970: 0), lastUsed: Date(timeIntervalSince1970: 0), count: 1
@@ -276,9 +276,9 @@ import CryptoKit
 
     @Test func branchRuleCoversEveryPathThroughIt() {
         let key = makeKey(rules: [BranchRule(hops: [vm1], state: .blocked)])
-        #expect(PolicyEngine.evaluate(key: key, chain: [vm1, github]) == .deny)
-        #expect(PolicyEngine.evaluate(key: key, chain: [vm1]) == .deny)
-        #expect(PolicyEngine.evaluate(key: key, chain: [vm2, github]) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1]) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm2, github]) == .ask)
     }
 
     /// The user's case: block github through vm1, approve it through vm2.
@@ -287,8 +287,8 @@ import CryptoKit
             BranchRule(hops: [vm1], state: .blocked),
             BranchRule(hops: [vm2], state: .approved),
         ])
-        #expect(PolicyEngine.evaluate(key: key, chain: [vm1, github]) == .deny)
-        #expect(PolicyEngine.evaluate(key: key, chain: [vm2, github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm2, github]) == .allow)
     }
 
     @Test func blockAnywhereOnPathWins() {
@@ -296,13 +296,13 @@ import CryptoKit
             destinations: [record([vm1, github], .approved)],
             rules: [BranchRule(hops: [vm1], state: .blocked)]
         )
-        #expect(PolicyEngine.evaluate(key: blockedBranch, chain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedBranch, bindingChain: [vm1, github]) == .deny)
 
         let blockedLeaf = makeKey(
             destinations: [record([vm1, github], .blocked)],
             rules: [BranchRule(hops: [vm1], state: .approved)]
         )
-        #expect(PolicyEngine.evaluate(key: blockedLeaf, chain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedLeaf, bindingChain: [vm1, github]) == .deny)
     }
 
     @Test func exactRecordBeatsApprovedBranchOnlyWhenBlocking() {
@@ -310,25 +310,25 @@ import CryptoKit
             destinations: [record([vm2, github], .neutral)],
             rules: [BranchRule(hops: [vm2], state: .approved)]
         )
-        #expect(PolicyEngine.evaluate(key: key, chain: [vm2, github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm2, github]) == .allow)
     }
 
     @Test func approveAllSignsUnblockedIncludingForwarded() {
         var key = makeKey()
         key.approveAll = true
-        #expect(PolicyEngine.evaluate(key: key, chain: [github]) == .allow)
-        #expect(PolicyEngine.evaluate(key: key, chain: [vm1, github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github]) == .allow)
         // Blocks still win over approve-all.
         var blockedFwd = key
         blockedFwd.blockForwarded = true
-        #expect(PolicyEngine.evaluate(key: blockedFwd, chain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedFwd, bindingChain: [vm1, github]) == .deny)
         var blockedDest = makeKey(destinations: [record([github], .blocked)])
         blockedDest.approveAll = true
-        #expect(PolicyEngine.evaluate(key: blockedDest, chain: [github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedDest, bindingChain: [github]) == .deny)
         // Approve-all overrides lock.
         var lockedToo = key
         lockedToo.locked = true
-        #expect(PolicyEngine.evaluate(key: lockedToo, chain: [github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: lockedToo, bindingChain: [github]) == .allow)
     }
 
     @Test func lockedDeniesUnapprovedButKeepsStandings() {
@@ -336,53 +336,53 @@ import CryptoKit
         var lockedApproved = approved
         lockedApproved.locked = true
         // Approved paths still sign, unknown paths deny instead of ask.
-        #expect(PolicyEngine.evaluate(key: lockedApproved, chain: [github]) == .allow)
-        #expect(PolicyEngine.evaluate(key: lockedApproved, chain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: lockedApproved, bindingChain: [github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: lockedApproved, bindingChain: [vm1, github]) == .deny)
 
         // Locking overrides auto-approve too: nothing new, even local.
         var lockedAuto = makeKey(autoApprove: true)
         lockedAuto.locked = true
-        #expect(PolicyEngine.evaluate(key: lockedAuto, chain: [github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: lockedAuto, bindingChain: [github]) == .deny)
 
         // A blocked path stays blocked (deny), unaffected by lock.
         var lockedBlocked = makeKey(destinations: [record([github], .blocked)])
         lockedBlocked.locked = true
-        #expect(PolicyEngine.evaluate(key: lockedBlocked, chain: [github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: lockedBlocked, bindingChain: [github]) == .deny)
     }
 
     @Test func autoApproveIsLocalOnly() {
         let key = makeKey(autoApprove: true)
         // Local (no forwarding) signs silently.
-        #expect(PolicyEngine.evaluate(key: key, chain: [github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [github]) == .allow)
         // Forwarded still asks, and an unbound request still asks.
-        #expect(PolicyEngine.evaluate(key: key, chain: [vm1, github]) == .ask)
-        #expect(PolicyEngine.evaluate(key: key, chain: []) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [vm1, github]) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: []) == .ask)
     }
 
     @Test func autoApproveYieldsToBlocks() {
         let blockedLeaf = makeKey(destinations: [record([github], .blocked)], autoApprove: true)
-        #expect(PolicyEngine.evaluate(key: blockedLeaf, chain: [github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedLeaf, bindingChain: [github]) == .deny)
 
         let blockedBranch = makeKey(rules: [BranchRule(hops: [github], state: .blocked)], autoApprove: true)
-        #expect(PolicyEngine.evaluate(key: blockedBranch, chain: [github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: blockedBranch, bindingChain: [github]) == .deny)
 
         let noForwarding = makeKey(autoApprove: true, blockForwarded: true)
-        #expect(PolicyEngine.evaluate(key: noForwarding, chain: [vm1, github]) == .deny)
-        #expect(PolicyEngine.evaluate(key: noForwarding, chain: [github]) == .allow)
+        #expect(PolicyEngine.evaluate(key: noForwarding, bindingChain: [vm1, github]) == .deny)
+        #expect(PolicyEngine.evaluate(key: noForwarding, bindingChain: [github]) == .allow)
     }
 
     @Test func deepChainsAreDistinctPaths() {
-        let hopA = ChainHop(fingerprint: "SHA256:a", algorithm: "ssh-ed25519", forwarding: true)
-        let hopB = ChainHop(fingerprint: "SHA256:b", algorithm: "ssh-ed25519", forwarding: true)
-        let hopC = ChainHop(fingerprint: "SHA256:c", algorithm: "ssh-ed25519", forwarding: true)
+        let hopA = BindingHop(fingerprint: "SHA256:a", algorithm: "ssh-ed25519", forwarding: true)
+        let hopB = BindingHop(fingerprint: "SHA256:b", algorithm: "ssh-ed25519", forwarding: true)
+        let hopC = BindingHop(fingerprint: "SHA256:c", algorithm: "ssh-ed25519", forwarding: true)
         let deep = [hopA, hopB, hopC, github]
         let key = makeKey(destinations: [record(deep, .approved)])
-        #expect(PolicyEngine.evaluate(key: key, chain: deep) == .allow)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: deep) == .allow)
         // Same destination, one hop shorter, is a different path.
-        #expect(PolicyEngine.evaluate(key: key, chain: [hopA, hopB, github]) == .ask)
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [hopA, hopB, github]) == .ask)
         // A block on the first hop covers the whole depth below it.
         let blocked = makeKey(destinations: [record(deep, .approved)], rules: [BranchRule(hops: [hopA], state: .blocked)])
-        #expect(PolicyEngine.evaluate(key: blocked, chain: deep) == .deny)
+        #expect(PolicyEngine.evaluate(key: blocked, bindingChain: deep) == .deny)
     }
 
     @Test func branchRulesDecodeWhenAbsent() throws {

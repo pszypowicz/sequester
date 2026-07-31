@@ -15,20 +15,20 @@ public enum SigningDecision: Equatable, Sendable {
 /// requesting connection.
 ///
 /// A block anywhere on the path wins; otherwise the most specific standing
-/// applies, where the exact chain beats a branch rule. A locked key then
+/// applies, where the exact binding chain beats a branch rule. A locked key then
 /// denies anything not already approved. An unlocked key auto-approves
 /// local (non-forwarded) use if configured, and otherwise asks.
 public enum PolicyEngine {
 
-    public static func evaluate(key: KeyMetadata, chain: [ChainHop]) -> SigningDecision {
-        if key.blockForwarded && chain.contains(where: { $0.forwarding }) {
+    public static func evaluate(key: KeyMetadata, bindingChain: [BindingHop]) -> SigningDecision {
+        if key.blockForwarded && bindingChain.contains(where: { $0.forwarding }) {
             return .deny
         }
-        let record = key.destinations.first { $0.hops == chain }
+        let record = key.destinations.first { $0.hops == bindingChain }
         if record?.state == .blocked {
             return .deny
         }
-        let branchRules = key.branchRules.filter { $0.matches(chain) }
+        let branchRules = key.branchRules.filter { $0.matches(bindingChain) }
         if branchRules.contains(where: { $0.state == .blocked }) {
             return .deny
         }
@@ -47,7 +47,7 @@ public enum PolicyEngine {
         if key.locked {
             return .deny
         }
-        if key.autoApprove && !chain.isEmpty && !chain.contains(where: { $0.forwarding }) {
+        if key.autoApprove && !bindingChain.isEmpty && !bindingChain.contains(where: { $0.forwarding }) {
             return .allow
         }
         return .ask

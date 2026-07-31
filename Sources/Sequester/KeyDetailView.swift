@@ -156,8 +156,8 @@ struct KeyDetailView: View {
         )
     }
 
-    private func rowState(_ hops: [ChainHop]) -> DestinationState {
-        key.branchRules.first { $0.id == DestinationRecord.chainID(hops) }?.state ?? .neutral
+    private func rowState(_ hops: [BindingHop]) -> DestinationState {
+        key.branchRules.first { $0.id == DestinationRecord.bindingChainID(hops) }?.state ?? .neutral
     }
 
     /// Full-row tint for a standing. Applied on the ForEach element so the
@@ -254,13 +254,13 @@ private struct DestinationRowView: View {
     let row: DestinationRow
     let allowApprove: Bool
     let label: (String) -> String
-    let branchState: ([ChainHop]) -> DestinationState
+    let branchState: ([BindingHop]) -> DestinationState
     let isCollapsed: (String) -> Bool
     let onToggle: (String) -> Void
     let onRecordState: (String, DestinationState) -> Void
-    let onBranchState: ([ChainHop], DestinationState) -> Void
+    let onBranchState: ([BindingHop], DestinationState) -> Void
     let onDelete: (String) -> Void
-    let onDeleteBranch: ([ChainHop]) -> Void
+    let onDeleteBranch: ([BindingHop]) -> Void
     let onName: (String) -> Void
 
     var body: some View {

@@ -6,15 +6,15 @@ import SequesterCore
 /// is worded to stand out.
 struct NotificationNotifier: SigningNotifier {
 
-    func signed(keyName: String, chain: [ChainHop], silent: Bool) {
+    func signed(keyName: String, bindingChain: [BindingHop], silent: Bool) {
         let content = UNMutableNotificationContent()
         content.title = silent ? "Signed without a prompt: \(keyName)" : "Signed: \(keyName)"
 
         var parts: [String] = []
-        if let destination = chain.last {
+        if let destination = bindingChain.last {
             parts.append("for \(HostNames.shared.label(for: destination.fingerprint))")
         }
-        if chain.contains(where: { $0.forwarding }) {
+        if bindingChain.contains(where: { $0.forwarding }) {
             parts.append("(forwarded)")
         }
         content.body = parts.isEmpty ? "SSH signature" : parts.joined(separator: " ")

@@ -27,9 +27,9 @@ public final class AgentSession: @unchecked Sendable {
         self.provenance = provenance
     }
 
-    public var chain: [ChainHop] {
+    public var bindingChain: [BindingHop] {
         bindings.map {
-            ChainHop(fingerprint: $0.hostKeyFingerprint, algorithm: $0.hostKeyAlgorithm, forwarding: $0.isForwarding)
+            BindingHop(fingerprint: $0.hostKeyFingerprint, algorithm: $0.hostKeyAlgorithm, forwarding: $0.isForwarding)
         }
     }
 }
@@ -38,7 +38,7 @@ public final class AgentSession: @unchecked Sendable {
 public struct ApprovalRequest: Sendable {
     public let keyName: String
     public let provenance: Provenance
-    public let chain: [ChainHop]
+    public let bindingChain: [BindingHop]
     /// Whether "don't ask again" is offered; false for unbound requests,
     /// which have no destination to remember.
     public let canRemember: Bool
@@ -72,7 +72,7 @@ public protocol SigningApprover: Sendable {
 /// at all (no dialog and no Touch ID prompt), which is the case worth
 /// noticing.
 public protocol SigningNotifier: Sendable {
-    func signed(keyName: String, chain: [ChainHop], silent: Bool)
+    func signed(keyName: String, bindingChain: [BindingHop], silent: Bool)
 }
 
 /// The SSH agent protocol handler: parses one client message, produces one
@@ -139,8 +139,8 @@ public struct Agent: Sendable {
             return Response.failure
         }
 
-        let chain = session.chain
-        var decision = PolicyEngine.evaluate(key: key, chain: chain)
+        let bindingChain = session.bindingChain
+        var decision = PolicyEngine.evaluate(key: key, bindingChain: bindingChain)
         // A silent allow is only trustworthy when the signature is tied to
         // the destination that was actually bound. Without that tie a
         // verified binding for one session could be reused to authorize a
@@ -154,13 +154,13 @@ public struct Agent: Sendable {
         // the request was not denied, so a denied probe (a locked key, a
         // blocked forwarded path) cannot grow the destinations list; the
         // refusal lives in the log instead.
-        if !chain.isEmpty {
-            let recorded = EnclaveKeyStore.recordObservation(name: key.name, hops: chain, createIfNew: decision != .deny)
-            if !recorded, let destination = chain.last {
+        if !bindingChain.isEmpty {
+            let recorded = EnclaveKeyStore.recordObservation(name: key.name, hops: bindingChain, createIfNew: decision != .deny)
+            if !recorded, let destination = bindingChain.last {
                 Log.agent.log("Refused signature for \(destination.fingerprint, privacy: .public) with \(key.name, privacy: .public); denied by policy, not added to destinations")
             }
         }
-        Log.agent.log("Sign request: key \(key.name, privacy: .public), requester \(session.provenance.displayName, privacy: .public) (pid \(session.provenance.pid, privacy: .public)), chain \(DestinationRecord.chainID(chain), privacy: .public), decision \(String(describing: decision), privacy: .public)")
+        Log.agent.log("Sign request: key \(key.name, privacy: .public), requester \(session.provenance.displayName, privacy: .public) (pid \(session.provenance.pid, privacy: .public)), chain \(DestinationRecord.bindingChainID(bindingChain), privacy: .public), decision \(String(describing: decision), privacy: .public)")
 
         switch decision {
         case .deny:
@@ -175,19 +175,19 @@ public struct Agent: Sendable {
                 let approval = await approver.approve(ApprovalRequest(
                     keyName: key.name,
                     provenance: session.provenance,
-                    chain: chain,
-                    canRemember: !chain.isEmpty
+                    bindingChain: bindingChain,
+                    canRemember: !bindingChain.isEmpty
                 ))
-                if let destination = chain.last, let name = approval.destinationName {
+                if let destination = bindingChain.last, let name = approval.destinationName {
                     HostNames.shared.setName(name, for: destination.fingerprint)
                 }
                 // "Don't ask again" applies to either choice: allow remembers
                 // as approved, deny remembers as blocked, which lets one
                 // dialog end a stream of requests.
-                if approval.remember, !chain.isEmpty {
+                if approval.remember, !bindingChain.isEmpty {
                     EnclaveKeyStore.setDestinationState(
                         name: key.name,
-                        id: DestinationRecord.chainID(chain),
+                        id: DestinationRecord.bindingChainID(bindingChain),
                         state: approval.allowed ? .approved : .blocked
                     )
                 }
@@ -202,11 +202,11 @@ public struct Agent: Sendable {
             let raw = try EnclaveKeyStore.sign(
                 name: key.name,
                 data: dataToSign,
-                reason: signReason(key: key, session: session, chain: chain)
+                reason: signReason(key: key, session: session, bindingChain: bindingChain)
             )
             Log.agent.log("Signed with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
             let silent = decision == .allow && !key.authRequired
-            notifier?.signed(keyName: key.name, chain: chain, silent: silent)
+            notifier?.signed(keyName: key.name, bindingChain: bindingChain, silent: silent)
             var payload = Data([Response.signResponse])
             payload.append(SSHWire.lengthPrefixed(OpenSSH.p256SignatureBlob(rawSignature: raw)))
             return payload
@@ -228,12 +228,12 @@ public struct Agent: Sendable {
         return signedSessionID == destination.sessionID
     }
 
-    private func signReason(key: KeyMetadata, session: AgentSession, chain: [ChainHop]) -> String {
+    private func signReason(key: KeyMetadata, session: AgentSession, bindingChain: [BindingHop]) -> String {
         var reason = "sign an SSH request from \(session.provenance.displayName) with key \"\(key.name)\""
-        if let destination = chain.last {
+        if let destination = bindingChain.last {
             reason += " for \(HostNames.shared.label(for: destination.fingerprint))"
         }
-        if chain.contains(where: { $0.forwarding }) {
+        if bindingChain.contains(where: { $0.forwarding }) {
             reason += " (FORWARDED)"
         }
         return reason
@@ -241,7 +241,7 @@ public struct Agent: Sendable {
 
     /// Records the binding only if its signature verifies against the host
     /// key. A forged binding (a host key the sender does not control)
-    /// fails verification and is rejected, so it never enters the chain the
+    /// fails verification and is rejected, so it never enters the binding chain the
     /// policy sees.
     private func handleExtension(reader: inout SSHWireReader, session: AgentSession) -> Data {
         guard let name = try? reader.readUTF8String() else { return Response.failure }

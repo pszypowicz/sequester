@@ -18,12 +18,12 @@ struct DialogApprover: SigningApprover {
     private func present(_ request: ApprovalRequest) -> ApprovalDecision {
         NSApp.activate(ignoringOtherApps: true)
 
-        let hops = request.chain.enumerated().map { index, hop in
+        let hops = request.bindingChain.enumerated().map { index, hop in
             ApprovalView.Hop(
                 name: HostNames.shared.name(for: hop.fingerprint),
                 fingerprint: hop.fingerprint,
                 forwarded: hop.forwarding,
-                isDestination: index == request.chain.count - 1
+                isDestination: index == request.bindingChain.count - 1
             )
         }
 
@@ -42,7 +42,7 @@ struct DialogApprover: SigningApprover {
             keyName: request.keyName,
             requester: "\(request.provenance.displayName) (pid \(request.provenance.pid))",
             hops: hops,
-            canName: !request.chain.isEmpty,
+            canName: !request.bindingChain.isEmpty,
             canRemember: request.canRemember
         ) { result in
             decision = result

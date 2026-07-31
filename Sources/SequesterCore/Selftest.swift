@@ -80,7 +80,7 @@ public enum Selftest {
             try EnclaveKeyStore.setApproveAll(name: temporaryKeyName, enabled: false)
         }
         check("destination tracking") {
-            let hop = ChainHop(fingerprint: "SHA256:selftest", algorithm: "ssh-ed25519", forwarding: false)
+            let hop = BindingHop(fingerprint: "SHA256:selftest", algorithm: "ssh-ed25519", forwarding: false)
             EnclaveKeyStore.recordObservation(name: temporaryKeyName, hops: [hop], createIfNew: true)
             EnclaveKeyStore.recordObservation(name: temporaryKeyName, hops: [hop], createIfNew: true)
             var metadata = try KeyStorage.load(name: temporaryKeyName).metadata
@@ -88,14 +88,14 @@ public enum Selftest {
                 throw KeychainError.corruptItem
             }
             EnclaveKeyStore.setDestinationState(
-                name: temporaryKeyName, id: DestinationRecord.chainID([hop]), state: .approved
+                name: temporaryKeyName, id: DestinationRecord.bindingChainID([hop]), state: .approved
             )
             metadata = try KeyStorage.load(name: temporaryKeyName).metadata
             guard metadata.destinations[0].state == .approved,
-                  PolicyEngine.evaluate(key: metadata, chain: [hop]) == .allow else {
+                  PolicyEngine.evaluate(key: metadata, bindingChain: [hop]) == .allow else {
                 throw KeychainError.corruptItem
             }
-            EnclaveKeyStore.removeDestination(name: temporaryKeyName, id: DestinationRecord.chainID([hop]))
+            EnclaveKeyStore.removeDestination(name: temporaryKeyName, id: DestinationRecord.bindingChainID([hop]))
             metadata = try KeyStorage.load(name: temporaryKeyName).metadata
             guard metadata.destinations.isEmpty else {
                 throw KeychainError.corruptItem

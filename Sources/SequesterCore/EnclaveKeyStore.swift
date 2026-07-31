@@ -156,14 +156,14 @@ public enum EnclaveKeyStore {
         return metadata
     }
 
-    /// Updates the usage log for an observed chain: bumps counters for a
+    /// Updates the usage log for an observed binding chain: bumps counters for a
     /// path that is already listed, and adds a neutral record for a new one
     /// only when `createIfNew` is set. A denied request for an unknown
     /// destination passes `createIfNew: false`, so a locked key or a probe
     /// cannot grow the destinations list. Returns whether anything was
     /// recorded; best effort, the signing flow must not fail on bookkeeping.
     @discardableResult
-    public static func recordObservation(name: String, hops: [ChainHop], createIfNew: Bool) -> Bool {
+    public static func recordObservation(name: String, hops: [BindingHop], createIfNew: Bool) -> Bool {
         guard !hops.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return false }
         let now = Date()
         if let index = metadata.destinations.firstIndex(where: { $0.hops == hops }) {
@@ -195,20 +195,20 @@ public enum EnclaveKeyStore {
         Log.store.log("Removed destination \(id, privacy: .public) of \(name, privacy: .public)")
     }
 
-    /// Forgets every observed path whose chain starts with these hops, i.e.
+    /// Forgets every observed path whose binding chain starts with these hops, i.e.
     /// the whole subtree rooted at a hop.
-    public static func removeDestinationsUnder(name: String, prefix: [ChainHop]) {
+    public static func removeDestinationsUnder(name: String, prefix: [BindingHop]) {
         guard !prefix.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return }
         metadata.destinations.removeAll { record in
             record.hops.count >= prefix.count && Array(record.hops.prefix(prefix.count)) == prefix
         }
         try? KeyStorage.updateMetadata(metadata)
-        Log.store.log("Removed destinations under \(DestinationRecord.chainID(prefix), privacy: .public) of \(name, privacy: .public)")
+        Log.store.log("Removed destinations under \(DestinationRecord.bindingChainID(prefix), privacy: .public) of \(name, privacy: .public)")
     }
 
     /// Sets the standing for every path starting with these hops. A
     /// neutral state drops the rule, since neutral is the default.
-    public static func setBranchRule(name: String, hops: [ChainHop], state: DestinationState) {
+    public static func setBranchRule(name: String, hops: [BindingHop], state: DestinationState) {
         guard !hops.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return }
         let rule = BranchRule(hops: hops, state: state)
         metadata.branchRules.removeAll { $0.id == rule.id }

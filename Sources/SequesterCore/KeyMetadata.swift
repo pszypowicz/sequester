@@ -11,7 +11,7 @@ public enum DestinationState: String, Codable, Sendable {
 /// One hop of an observed session-binding chain: the host key the
 /// connection was bound to, and whether the client flagged the binding as
 /// made on behalf of a forwarded agent.
-public struct ChainHop: Codable, Hashable, Sendable {
+public struct BindingHop: Codable, Hashable, Sendable {
     public let fingerprint: String
     public let algorithm: String
     public let forwarding: Bool
@@ -24,17 +24,17 @@ public struct ChainHop: Codable, Hashable, Sendable {
 }
 
 /// A path a key has been asked to sign for, keyed by the exact binding
-/// chain observed. Serves as both the usage log entry and the per-path
+/// binding chain observed. Serves as both the usage log entry and the per-path
 /// policy, so "github reached locally" and "github reached through vm1"
 /// are distinct records with independent standing.
 public struct DestinationRecord: Codable, Hashable, Sendable, Identifiable {
-    public var hops: [ChainHop]
+    public var hops: [BindingHop]
     public var state: DestinationState
     public var firstSeen: Date
     public var lastUsed: Date
     public var count: Int
 
-    public init(hops: [ChainHop], state: DestinationState, firstSeen: Date, lastUsed: Date, count: Int) {
+    public init(hops: [BindingHop], state: DestinationState, firstSeen: Date, lastUsed: Date, count: Int) {
         self.hops = hops
         self.state = state
         self.firstSeen = firstSeen
@@ -42,35 +42,35 @@ public struct DestinationRecord: Codable, Hashable, Sendable, Identifiable {
         self.count = count
     }
 
-    public static func chainID(_ hops: [ChainHop]) -> String {
+    public static func bindingChainID(_ hops: [BindingHop]) -> String {
         hops.map { "\($0.fingerprint)\($0.forwarding ? ">" : "")" }.joined(separator: "|")
     }
 
-    public var id: String { Self.chainID(hops) }
+    public var id: String { Self.bindingChainID(hops) }
 
     public var isForwarded: Bool {
         hops.contains { $0.forwarding }
     }
 
-    /// The final target of the chain.
-    public var destination: ChainHop? { hops.last }
+    /// The final target of the binding chain.
+    public var destination: BindingHop? { hops.last }
 }
 
-/// A standing applied to every path whose chain starts with these hops,
+/// A standing applied to every path whose binding chain starts with these hops,
 /// so a whole branch of the destination tree can be governed at once.
 public struct BranchRule: Codable, Hashable, Sendable, Identifiable {
-    public var hops: [ChainHop]
+    public var hops: [BindingHop]
     public var state: DestinationState
 
-    public init(hops: [ChainHop], state: DestinationState) {
+    public init(hops: [BindingHop], state: DestinationState) {
         self.hops = hops
         self.state = state
     }
 
-    public var id: String { DestinationRecord.chainID(hops) }
+    public var id: String { DestinationRecord.bindingChainID(hops) }
 
-    public func matches(_ chain: [ChainHop]) -> Bool {
-        chain.count >= hops.count && Array(chain.prefix(hops.count)) == hops
+    public func matches(_ bindingChain: [BindingHop]) -> Bool {
+        bindingChain.count >= hops.count && Array(bindingChain.prefix(hops.count)) == hops
     }
 }
 
