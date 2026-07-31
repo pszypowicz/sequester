@@ -140,10 +140,6 @@ public struct Agent: Sendable {
         }
 
         let chain = session.chain
-        if !chain.isEmpty {
-            EnclaveKeyStore.recordObservation(name: key.name, hops: chain)
-        }
-
         var decision = PolicyEngine.evaluate(key: key, chain: chain)
         // A silent allow is only trustworthy when the signature is tied to
         // the destination that was actually bound. Without that tie a
@@ -152,6 +148,17 @@ public struct Agent: Sendable {
         if decision == .allow && !destinationBound(session: session, dataToSign: dataToSign) {
             Log.agent.log("Downgrading allow to ask for \(key.name, privacy: .public): request not bound to the destination session")
             decision = .ask
+        }
+
+        // Bump an already-listed destination, but only add a new one when
+        // the request was not denied, so a denied probe (a locked key, a
+        // blocked forwarded path) cannot grow the destinations list; the
+        // refusal lives in the log instead.
+        if !chain.isEmpty {
+            let recorded = EnclaveKeyStore.recordObservation(name: key.name, hops: chain, createIfNew: decision != .deny)
+            if !recorded, let destination = chain.last {
+                Log.agent.log("Refused signature for \(destination.fingerprint, privacy: .public) with \(key.name, privacy: .public); denied by policy, not added to destinations")
+            }
         }
         Log.agent.log("Sign request: key \(key.name, privacy: .public), requester \(session.provenance.displayName, privacy: .public) (pid \(session.provenance.pid, privacy: .public)), chain \(DestinationRecord.chainID(chain), privacy: .public), decision \(String(describing: decision), privacy: .public)")
 

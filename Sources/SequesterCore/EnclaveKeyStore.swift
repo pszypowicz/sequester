@@ -140,20 +140,27 @@ public enum EnclaveKeyStore {
     }
 
     /// Updates the usage log for an observed chain: bumps counters for a
-    /// known path, adds a neutral record for a new one. Best effort; the
-    /// signing flow must not fail on bookkeeping.
-    public static func recordObservation(name: String, hops: [ChainHop]) {
-        guard !hops.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return }
+    /// path that is already listed, and adds a neutral record for a new one
+    /// only when `createIfNew` is set. A denied request for an unknown
+    /// destination passes `createIfNew: false`, so a locked key or a probe
+    /// cannot grow the destinations list. Returns whether anything was
+    /// recorded; best effort, the signing flow must not fail on bookkeeping.
+    @discardableResult
+    public static func recordObservation(name: String, hops: [ChainHop], createIfNew: Bool) -> Bool {
+        guard !hops.isEmpty, var metadata = try? KeyStorage.load(name: name).metadata else { return false }
         let now = Date()
         if let index = metadata.destinations.firstIndex(where: { $0.hops == hops }) {
             metadata.destinations[index].lastUsed = now
             metadata.destinations[index].count += 1
-        } else {
+        } else if createIfNew {
             metadata.destinations.append(DestinationRecord(
                 hops: hops, state: .neutral, firstSeen: now, lastUsed: now, count: 1
             ))
+        } else {
+            return false
         }
         try? KeyStorage.updateMetadata(metadata)
+        return true
     }
 
     public static func setDestinationState(name: String, id: String, state: DestinationState) {

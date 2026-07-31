@@ -70,8 +70,8 @@ public enum Selftest {
         }
         check("destination tracking") {
             let hop = ChainHop(fingerprint: "SHA256:selftest", algorithm: "ssh-ed25519", forwarding: false)
-            EnclaveKeyStore.recordObservation(name: temporaryKeyName, hops: [hop])
-            EnclaveKeyStore.recordObservation(name: temporaryKeyName, hops: [hop])
+            EnclaveKeyStore.recordObservation(name: temporaryKeyName, hops: [hop], createIfNew: true)
+            EnclaveKeyStore.recordObservation(name: temporaryKeyName, hops: [hop], createIfNew: true)
             var metadata = try KeyStorage.load(name: temporaryKeyName).metadata
             guard metadata.destinations.count == 1, metadata.destinations[0].count == 2 else {
                 throw KeychainError.corruptItem
