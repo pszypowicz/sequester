@@ -29,8 +29,10 @@ dev: build
 dev-stop:
 	-killall Sequester 2>/dev/null
 
-# Build, sign, notarize, staple, and produce the notarized Sequester.zip.
+# Build, sign, notarize, staple, and produce the notarized Sequester.zip
+# (for the Homebrew cask) and Sequester.dmg (for humans).
 release:
 	bash scripts/notarize-release.sh
+	bash scripts/package-dmg.sh
 
 .PHONY: build build-adhoc install uninstall test dev dev-stop release
