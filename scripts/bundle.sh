@@ -1,0 +1,61 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Build Sequester.app from the Swift package into .build/Sequester.app.
+
+Usage: scripts/bundle.sh [--identity <substring|adhoc>]
+
+Flags:
+  --identity   Codesign identity, matched as a substring against
+               'security find-identity' output (default: "Developer ID
+               Application", the release identity). No fallback: a missing
+               match is a hard error, never a silently different signature.
+               Pass "adhoc" for an unsigned local build.
+  -h, --help   Show this help.
+EOF
+}
+
+identity="Developer ID Application"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --identity) identity="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown argument: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+# Version comes from the VERSION file - the single source of truth, also
+# read by the BuildMetadata plugin so the app reports the same string.
+VERSION=$(head -1 VERSION 2>/dev/null | tr -d '[:space:]')
+[ -n "$VERSION" ] || { echo "error: VERSION file missing or empty" >&2; exit 1; }
+
+swift build -c release
+
+APP=".build/Sequester.app/Contents"
+rm -rf ".build/Sequester.app"
+mkdir -p "$APP/MacOS" "$APP/Resources"
+
+cp .build/release/Sequester "$APP/MacOS/Sequester"
+cp Sources/Sequester/Info.plist "$APP/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Info.plist"
+
+if [[ "$identity" == "adhoc" ]]; then
+  codesign --sign - --force --options runtime .build/Sequester.app
+else
+  # || true: with set -e, a failing security query (locked/absent
+  # keychain) would abort before the explicit error below.
+  sign=$(security find-identity -v -p codesigning | awk -v id="$identity" '$0 ~ id {print $2; exit}' || true)
+  if [[ -z "$sign" ]]; then
+    echo "error: no codesigning identity matching '$identity'" >&2
+    echo "List identities with: security find-identity -v -p codesigning" >&2
+    echo "Pick one with --identity <substring>, or --identity adhoc for an unsigned dev build." >&2
+    exit 1
+  fi
+  # --timestamp: notarization requires a secure timestamp.
+  codesign --sign "$sign" --force --options runtime --timestamp .build/Sequester.app
+fi
+
+echo "Built .build/Sequester.app"
