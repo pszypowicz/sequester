@@ -82,6 +82,24 @@ import CryptoKit
         #expect(parts[2] == "work@sequester")
     }
 
+    @Test func keyCustomCommentUsedVerbatim() {
+        let key = P256.Signing.PrivateKey()
+        let metadata = KeyMetadata(name: "work", keyDescription: "", authRequired: false,
+                                   comment: "me@example.com",
+                                   publicKey: key.publicKey.x963Representation,
+                                   createdAt: Date(timeIntervalSince1970: 0))
+        #expect(metadata.effectiveComment == "me@example.com")
+        #expect(metadata.publicKeyLine.split(separator: " ")[2] == "me@example.com")
+    }
+
+    @Test func sanitizeCommentDropsControlCharsAndEmptyToNil() {
+        #expect(EnclaveKeyStore.sanitizeComment("  me@example.com  ") == "me@example.com")
+        #expect(EnclaveKeyStore.sanitizeComment("a\nb\tc") == "abc")
+        #expect(EnclaveKeyStore.sanitizeComment("keep spaces") == "keep spaces")
+        #expect(EnclaveKeyStore.sanitizeComment("   ") == nil)
+        #expect(EnclaveKeyStore.sanitizeComment(nil) == nil)
+    }
+
     @Test func signatureBlobParsesAsMpints() throws {
         let key = P256.Signing.PrivateKey()
         let signature = try key.signature(for: Data("payload".utf8))

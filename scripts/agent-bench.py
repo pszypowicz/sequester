@@ -66,7 +66,7 @@ def key_blob(sock: socket.socket, key_name: str) -> bytes:
     for _ in range(count):
         blob, off = read_str(resp, off)
         comment, off = read_str(resp, off)
-        if comment.decode() == key_name:
+        if comment.decode() in (key_name, f"{key_name}@sequester"):
             return blob
     sys.exit(f"key {key_name!r} not offered by the agent")
 

@@ -13,6 +13,7 @@ struct EditKeySheet: View {
 
     @State private var name: String
     @State private var keyDescription: String
+    @State private var comment: String
     @State private var errorMessage: String?
 
     init(key: KeyMetadata, onRename: @escaping (String) -> Void) {
@@ -20,17 +21,20 @@ struct EditKeySheet: View {
         self.onRename = onRename
         _name = State(initialValue: key.name)
         _keyDescription = State(initialValue: key.keyDescription)
+        _comment = State(initialValue: key.comment ?? "")
     }
 
     var body: some View {
         SheetScaffold(primaryTitle: "Save", primaryDisabled: name.isEmpty,
-                      error: errorMessage, size: CGSize(width: 420, height: 220),
+                      error: errorMessage, size: CGSize(width: 420, height: 260),
                       onPrimary: save) {
             Section {
                 TextField("Name", text: $name)
                 TextField("Description", text: $keyDescription, prompt: Text("optional"))
+                TextField("Comment", text: $comment,
+                          prompt: Text("\(name.isEmpty ? "name" : name)@sequester"))
             } footer: {
-                Text("The public key filename is derived from the key itself, so renaming never breaks SSH config.")
+                Text("The public key comment defaults to name@sequester. The public key filename is derived from the key itself, so renaming never breaks SSH config.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -45,6 +49,9 @@ struct EditKeySheet: View {
             }
             if keyDescription != key.keyDescription {
                 try store.setDescription(name: name, description: keyDescription)
+            }
+            if comment != (key.comment ?? "") {
+                try store.setComment(name: name, comment: comment.isEmpty ? nil : comment)
             }
             dismiss()
         } catch {

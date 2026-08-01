@@ -36,13 +36,18 @@ final class KeyStore {
         keys = EnclaveKeyStore.list()
     }
 
-    func create(name: String, description: String, authRequired: Bool) throws {
-        try EnclaveKeyStore.create(name: name, description: description, authRequired: authRequired)
+    func create(name: String, description: String, authRequired: Bool, comment: String?) throws {
+        try EnclaveKeyStore.create(name: name, description: description, authRequired: authRequired, comment: comment)
         reload()
     }
 
     func setDescription(name: String, description: String) throws {
         try EnclaveKeyStore.updateDescription(name: name, description: description)
+        reload()
+    }
+
+    func setComment(name: String, comment: String?) throws {
+        try EnclaveKeyStore.updateComment(name: name, comment: comment)
         reload()
     }
 

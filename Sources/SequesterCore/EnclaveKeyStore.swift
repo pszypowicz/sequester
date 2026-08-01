@@ -49,7 +49,7 @@ public enum EnclaveKeyStore {
     }
 
     @discardableResult
-    public static func create(name: String, description: String, authRequired: Bool) throws -> KeyMetadata {
+    public static func create(name: String, description: String, authRequired: Bool, comment: String? = nil) throws -> KeyMetadata {
         try KeyName.validate(name)
         guard isEnclaveAvailable else { throw EnclaveKeyStoreError.enclaveUnavailable }
 
@@ -72,6 +72,7 @@ public enum EnclaveKeyStore {
             name: name,
             keyDescription: description,
             authRequired: authRequired,
+            comment: sanitizeComment(comment),
             publicKey: key.publicKey.x963Representation,
             createdAt: Date()
         )
@@ -94,6 +95,36 @@ public enum EnclaveKeyStore {
         let metadata = try KeyStorage.mutate(name: name) { $0.keyDescription = description; return true }
         Log.store.log("Updated description of \(name, privacy: .public)")
         return metadata
+    }
+
+    /// Sets a key's public key comment (nil or empty restores the
+    /// "<name>@sequester" default) and rewrites its .pub file.
+    @discardableResult
+    public static func updateComment(name: String, comment: String?) throws -> KeyMetadata {
+        let metadata = try KeyStorage.mutate(name: name) { $0.comment = sanitizeComment(comment); return true }
+        try writePublicKeyFile(metadata)
+        Log.store.log("Updated comment of \(name, privacy: .public)")
+        return metadata
+    }
+
+    /// A key comment becomes the trailing field of a one-line .pub and the
+    /// agent identity comment, so newlines and control characters are dropped
+    /// and the value trimmed. An empty result means "use the default".
+    static func sanitizeComment(_ comment: String?) -> String? {
+        guard let comment else { return nil }
+        var scalars = String.UnicodeScalarView()
+        for scalar in comment.unicodeScalars {
+            if scalar == " " { scalars.append(scalar); continue }
+            if scalar.properties.isWhitespace { continue }
+            switch scalar.properties.generalCategory {
+            case .control, .format, .lineSeparator, .paragraphSeparator, .surrogate:
+                continue
+            default:
+                scalars.append(scalar)
+            }
+        }
+        let result = String(scalars).trimmingCharacters(in: .whitespaces)
+        return result.isEmpty ? nil : result
     }
 
     /// Renaming touches only the keychain item and the .pub comment; the

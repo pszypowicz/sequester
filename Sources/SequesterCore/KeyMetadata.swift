@@ -103,6 +103,10 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     /// Per-key overrides of an app's standing, taking precedence over the
     /// global authorization for this key.
     public var appRules: [AppRule]
+    /// Optional public key comment. When nil or empty the .pub file and the
+    /// agent use "<name>@sequester", which tracks renames; a custom value
+    /// (such as an email) is used verbatim.
+    public var comment: String?
     /// The public key (x9.63 uncompressed point), cached at creation so
     /// listing never has to load Enclave key handles.
     public let publicKey: Data
@@ -115,7 +119,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
                 autoApprove: Bool = false, locked: Bool = false,
                 destinations: [DestinationRecord] = [],
                 branchRules: [BranchRule] = [], appRules: [AppRule] = [],
-                publicKey: Data, createdAt: Date) {
+                comment: String? = nil, publicKey: Data, createdAt: Date) {
         self.name = name
         self.keyDescription = keyDescription
         self.authRequired = authRequired
@@ -126,6 +130,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         self.destinations = destinations
         self.branchRules = branchRules
         self.appRules = appRules
+        self.comment = comment
         self.publicKey = publicKey
         self.createdAt = createdAt
     }
@@ -151,8 +156,14 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         SequesterPaths.publicKeyURL(stem: publicKeyFileStem)
     }
 
+    /// The comment written into the .pub file and offered by the agent.
+    public var effectiveComment: String {
+        if let comment, !comment.isEmpty { return comment }
+        return "\(name)@sequester"
+    }
+
     public var publicKeyLine: String {
-        OpenSSH.publicKeyLine(x963: publicKey, comment: "\(name)@sequester")
+        OpenSSH.publicKeyLine(x963: publicKey, comment: effectiveComment)
     }
 }
 
