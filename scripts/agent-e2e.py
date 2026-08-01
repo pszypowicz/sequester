@@ -84,7 +84,7 @@ def find_identity(sock: socket.socket, key_name: str) -> bytes:
     for _ in range(count):
         blob, offset = read_sshstr(response, offset)
         comment, offset = read_sshstr(response, offset)
-        if comment.decode() == key_name:
+        if comment.decode() in (key_name, f"{key_name}@sequester"):
             print(f"OK identity listed ({count} total)")
             return blob
     sys.exit(f"FAIL list: no identity named {key_name!r} among {count}")

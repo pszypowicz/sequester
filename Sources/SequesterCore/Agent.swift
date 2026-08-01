@@ -144,7 +144,7 @@ public struct Agent: Sendable {
         payload.append(SSHWire.uint32(UInt32(keys.count)))
         for key in keys {
             payload.append(SSHWire.lengthPrefixed(key.publicKeyBlob))
-            payload.append(SSHWire.lengthPrefixed(key.name))
+            payload.append(SSHWire.lengthPrefixed(key.effectiveComment))
         }
         return payload
     }
