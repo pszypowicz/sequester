@@ -307,7 +307,11 @@ public enum EnclaveKeyStore {
         try SequesterPaths.ensureDirectory()
         let url = metadata.publicKeyFileURL
         try Data((metadata.publicKeyLine + "\n").utf8).write(to: url)
-        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+        // Owner-only: nothing but ssh running as this user reads the file, and
+        // OpenSSH refuses to use a group- or world-readable path as an
+        // IdentityFile ("permissions are too open"), so the public convention
+        // of 0644 would break the very ssh config this file exists for.
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         Log.store.debug("Wrote \(url.path, privacy: .public)")
     }
 
@@ -323,6 +327,12 @@ public enum EnclaveKeyStore {
             let existing = try? String(contentsOf: key.publicKeyFileURL, encoding: .utf8)
             if existing != line {
                 try? writePublicKeyFile(key)
+            } else {
+                // Content is current, but a file an older version wrote is
+                // group- and world-readable; re-tighten it so ssh keeps
+                // accepting it as an IdentityFile after an upgrade.
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o600], ofItemAtPath: key.publicKeyFileURL.path)
             }
         }
         let expected = Set(keys.map { "\($0.publicKeyFileStem).pub" })
