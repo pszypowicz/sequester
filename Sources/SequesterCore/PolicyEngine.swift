@@ -24,25 +24,49 @@ public enum SigningDecision: Equatable, Sendable {
 /// Block-wins is the safe default for a security tool.
 public enum PolicyEngine {
 
+    /// Why a request was refused before any prompt, for surfacing the silent
+    /// refusal to the user. Set only when the decision is `.deny`.
+    public enum DenialReason: Equatable, Sendable {
+        /// The requesting app is blocked (globally or for this key).
+        case appBlocked
+        /// The bound path is blocked - an exact chain, a branch rule, or a
+        /// blocked forwarded hop.
+        case destinationBlocked
+        /// A locked key was asked to sign for a path it has not pre-approved.
+        case keyLocked
+    }
+
+    /// The decision plus, when it is `.deny`, the reason it was refused.
+    public struct Outcome: Equatable, Sendable {
+        public let decision: SigningDecision
+        public let denialReason: DenialReason?
+    }
+
     public static func evaluate(key: KeyMetadata, bindingChain: [BindingHop],
                                 appStanding: AppStanding,
                                 trust: Provenance.Trust) -> SigningDecision {
+        outcome(key: key, bindingChain: bindingChain, appStanding: appStanding, trust: trust).decision
+    }
+
+    public static func outcome(key: KeyMetadata, bindingChain: [BindingHop],
+                               appStanding: AppStanding,
+                               trust: Provenance.Trust) -> Outcome {
         // A blocked app is refused outright, like a destination block.
         if appStanding == .blocked {
-            return .deny
+            return Outcome(decision: .deny, denialReason: .appBlocked)
         }
 
         // Destination-axis blocks still win over any approval.
         if key.blockForwarded && bindingChain.contains(where: { $0.forwarding }) {
-            return .deny
+            return Outcome(decision: .deny, denialReason: .destinationBlocked)
         }
         let record = key.destinations.first { $0.hops == bindingChain }
         if record?.state == .blocked {
-            return .deny
+            return Outcome(decision: .deny, denialReason: .destinationBlocked)
         }
         let branchRules = key.branchRules.filter { $0.matches(bindingChain) }
         if branchRules.contains(where: { $0.state == .blocked }) {
-            return .deny
+            return Outcome(decision: .deny, denialReason: .destinationBlocked)
         }
 
         // Resolve the destination axis before the app gate. A destination-level
@@ -53,7 +77,7 @@ public enum PolicyEngine {
         let destination = destinationDecision(key: key, bindingChain: bindingChain,
                                               record: record, branchRules: branchRules)
         if destination == .deny {
-            return .deny
+            return Outcome(decision: .deny, denialReason: .keyLocked)
         }
 
         // The app must be authorized before anything signs. An app that has
@@ -61,15 +85,15 @@ public enum PolicyEngine {
         // even for a Touch ID key, whose Enclave prompt cannot capture that
         // choice.
         if appStanding == .unknown {
-            return .ask
+            return Outcome(decision: .ask, denialReason: nil)
         }
 
         // A silent signature requires a verified requester; an unverified peer
         // that would otherwise sign silently is downgraded to asking.
         if trust == .unverified && destination == .allow {
-            return .ask
+            return Outcome(decision: .ask, denialReason: nil)
         }
-        return destination
+        return Outcome(decision: destination, denialReason: nil)
     }
 
     private static func destinationDecision(key: KeyMetadata, bindingChain: [BindingHop],

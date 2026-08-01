@@ -25,7 +25,7 @@ struct CreateKeySheet: View {
             Section {
                 Toggle("Require Touch ID for every signature", isOn: $authRequired)
             } footer: {
-                Text("The Touch ID requirement is baked into the key at creation and is permanent. Name, description, and comment can be changed anytime, and the public key filename is derived from the key itself, so renaming never breaks SSH config. Approval settings live on the key's page.")
+                Text("The Touch ID requirement is baked into the key at creation and is permanent. Name, description, and comment can be changed anytime. Approval settings live on the key's page.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

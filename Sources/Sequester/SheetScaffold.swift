@@ -29,12 +29,23 @@ struct SheetScaffold<Content: View>: View {
                 }
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
-                Button(primaryTitle, role: primaryRole, action: onPrimary)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(primaryDisabled)
+                primaryButton
             }
             .padding()
         }
         .frame(width: size.width, height: size.height)
+    }
+
+    /// The default-action button. A destructive action gets a red prominent
+    /// fill so it reads as dangerous rather than as the ordinary blue default.
+    @ViewBuilder private var primaryButton: some View {
+        let button = Button(primaryTitle, role: primaryRole, action: onPrimary)
+            .keyboardShortcut(.defaultAction)
+            .disabled(primaryDisabled)
+        if primaryRole == .destructive {
+            button.buttonStyle(.borderedProminent).tint(.red)
+        } else {
+            button
+        }
     }
 }

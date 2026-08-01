@@ -44,7 +44,7 @@ struct SetupView: View {
             }
 
             Section("SSH config") {
-                Text("Add this to ~/.ssh/config. Each key's public half lives next to the socket under a filename derived from the key itself (copy the exact path from the key's page), so per-host IdentityFile entries work the same way they do with plain key files and survive renames.")
+                Text("Add this to ~/.ssh/config. Each key's public half lives next to the socket (copy the exact path from the key's page), so per-host IdentityFile entries work the same way they do with plain key files.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(snippet)

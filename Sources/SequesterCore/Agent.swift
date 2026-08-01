@@ -92,7 +92,12 @@ public protocol SigningApprover: Sendable {
 /// at all (no dialog and no Touch ID prompt), which is the case worth
 /// noticing.
 public protocol SigningNotifier: Sendable {
-    func signed(keyName: String, bindingChain: [BindingHop], silent: Bool)
+    func signed(keyName: String, authRequired: Bool, bindingChain: [BindingHop], silent: Bool)
+    /// A request refused by policy before any prompt, so the user learns why
+    /// a signature the terminal only reports as "agent refused operation" was
+    /// turned down.
+    func denied(keyName: String, authRequired: Bool, requester: String,
+                bindingChain: [BindingHop], reason: PolicyEngine.DenialReason)
 }
 
 /// The SSH agent protocol handler: parses one client message, produces one
@@ -161,8 +166,9 @@ public struct Agent: Sendable {
 
         let bindingChain = session.bindingChain
         let appStanding = resolveAppStanding(key: key, session: session)
-        var decision = PolicyEngine.evaluate(key: key, bindingChain: bindingChain,
-                                             appStanding: appStanding, trust: session.provenance.trust)
+        let outcome = PolicyEngine.outcome(key: key, bindingChain: bindingChain,
+                                           appStanding: appStanding, trust: session.provenance.trust)
+        var decision = outcome.decision
         // A silent allow is only trustworthy when the signature is tied to
         // the destination that was actually bound. Without that tie a
         // verified binding for one session could be reused to authorize a
@@ -186,6 +192,11 @@ public struct Agent: Sendable {
 
         switch decision {
         case .deny:
+            if let reason = outcome.denialReason {
+                notifier?.denied(keyName: key.name, authRequired: key.authRequired,
+                                 requester: session.provenance.displayName,
+                                 bindingChain: bindingChain, reason: reason)
+            }
             return Response.failure
         case .allow:
             break
@@ -232,7 +243,8 @@ public struct Agent: Sendable {
             )
             Log.agent.log("Signed with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
             let silent = decision == .allow && !key.authRequired
-            notifier?.signed(keyName: key.name, bindingChain: bindingChain, silent: silent)
+            notifier?.signed(keyName: key.name, authRequired: key.authRequired,
+                             bindingChain: bindingChain, silent: silent)
             var payload = Data([Response.signResponse])
             payload.append(SSHWire.lengthPrefixed(OpenSSH.p256SignatureBlob(rawSignature: raw)))
             return payload

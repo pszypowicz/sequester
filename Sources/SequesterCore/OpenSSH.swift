@@ -60,10 +60,8 @@ public enum OpenSSH {
         return try? reader.readUTF8String()
     }
 
-    /// A filesystem-safe stem derived from the key itself (first 16 hex
-    /// chars of the blob's SHA256). Used for the on-disk .pub filename so
-    /// it stays stable across renames: the file is the contract ssh config
-    /// references, the name is presentation.
+    /// A filesystem-safe stem for the on-disk .pub filename: the first 16
+    /// hex chars of the blob's SHA256.
     public static func fileStem(blob: Data) -> String {
         SHA256.hash(data: blob).prefix(8).map { String(format: "%02x", $0) }.joined()
     }
