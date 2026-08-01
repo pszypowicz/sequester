@@ -128,7 +128,7 @@ public enum EnclaveKeyStore {
     }
 
     /// Renaming touches only the keychain item and the .pub comment; the
-    /// .pub filename is derived from the key and stays put.
+    /// .pub filename stays put.
     @discardableResult
     public static func rename(name: String, to newName: String) throws -> KeyMetadata {
         guard newName != name else { return try KeyStorage.load(name: name).metadata }

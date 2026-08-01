@@ -76,7 +76,6 @@ struct AppsView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Apps")
     }
 
     private func row(_ authorization: AppAuthorization) -> some View {
@@ -106,6 +105,7 @@ struct AppsView: View {
                 store.remove(authorization)
             } label: {
                 Image(systemName: "trash")
+                    .foregroundStyle(.red)
             }
             .buttonStyle(.borderless)
             .help("Forget this app; it will ask again next time.")

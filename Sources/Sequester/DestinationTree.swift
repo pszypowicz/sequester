@@ -90,13 +90,17 @@ struct DestinationRow: Identifiable {
 
 extension DestinationTree {
 
-    /// Flattens the tree into display rows, honoring the collapsed set.
-    /// Destinations at a level come before the deeper routes at that level.
-    func rows(collapsed: Set<String>) -> [DestinationRow] {
+    /// Direct destinations - those reached with no forwarding hop - as flat
+    /// rows, for the Local list.
+    func localRows() -> [DestinationRow] {
+        rootDestinations.map { DestinationRow(id: $0.id, depth: 0, kind: .destination($0)) }
+    }
+
+    /// The forwarding routes flattened into display rows, honoring the
+    /// collapsed set, for the Forwarded list. A destination at a level comes
+    /// before the deeper routes at that level.
+    func forwardedRows(collapsed: Set<String>) -> [DestinationRow] {
         var rows: [DestinationRow] = []
-        for destination in rootDestinations {
-            rows.append(DestinationRow(id: destination.id, depth: 0, kind: .destination(destination)))
-        }
         for node in rootRoutes {
             append(node, depth: 0, collapsed: collapsed, into: &rows)
         }

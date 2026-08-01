@@ -91,11 +91,6 @@ struct ApprovalView: View {
             if canRemember {
                 Toggle("Don't ask again for this destination", isOn: $remember)
                     .toggleStyle(.checkbox)
-                if remember {
-                    Text("Allow approves it; Deny blocks it. Either way, further requests to this destination stop asking.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             HStack {

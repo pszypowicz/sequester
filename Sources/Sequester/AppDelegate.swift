@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.app.log("Sequester launched, login item \(LoginItem.isEnabled, privacy: .public)")
+        UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error {
                 Log.app.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
@@ -75,5 +76,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static func isSettingsWindow(_ window: NSWindow) -> Bool {
         window.identifier?.rawValue.hasPrefix("main") == true
+    }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+
+    /// Show banners even when Sequester is frontmost, so a refusal is not
+    /// swallowed while the settings window has focus.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    /// Clicking a signature notification jumps to the key it names. The key
+    /// name travels in the request's userInfo; nothing else is captured, so
+    /// the non-Sendable response never crosses to the main actor.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let keyName = response.notification.request.content.userInfo["keyName"] as? String
+        Task { @MainActor in
+            if let keyName {
+                Navigator.shared.showKey(keyName)
+            }
+        }
+        completionHandler()
     }
 }

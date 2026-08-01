@@ -265,6 +265,49 @@ import CryptoKit
         #expect(PolicyEngine.evaluate(key: key, bindingChain: viaVM2, appStanding: .allowed, trust: .applePlatform) == .ask)
         #expect(PolicyEngine.evaluate(key: key, bindingChain: [local], appStanding: .allowed, trust: .applePlatform) == .ask)
     }
+
+    @Test func denialReasonNamesTheCause() {
+        // App block wins first, so it is named even when the destination is
+        // also blocked.
+        let appBlocked = PolicyEngine.outcome(key: makeKey(destinations: [record([local], .blocked)]),
+                                              bindingChain: [local], appStanding: .blocked, trust: .applePlatform)
+        #expect(appBlocked.decision == .deny)
+        #expect(appBlocked.denialReason == .appBlocked)
+
+        let destBlocked = PolicyEngine.outcome(key: makeKey(destinations: [record([local], .blocked)]),
+                                               bindingChain: [local], appStanding: .allowed, trust: .applePlatform)
+        #expect(destBlocked.denialReason == .destinationBlocked)
+
+        let forwardedBlocked = PolicyEngine.outcome(key: makeKey(blockForwarded: true),
+                                                    bindingChain: [hop, local], appStanding: .allowed, trust: .applePlatform)
+        #expect(forwardedBlocked.denialReason == .destinationBlocked)
+
+        let locked = PolicyEngine.outcome(key: makeLockedKey(),
+                                          bindingChain: [local], appStanding: .allowed, trust: .applePlatform)
+        #expect(locked.decision == .deny)
+        #expect(locked.denialReason == .keyLocked)
+    }
+
+    @Test func denialReasonSetIffDenied() {
+        // A reason is present exactly when the decision denies, so the
+        // notification path never mislabels an ask/allow.
+        let asked = PolicyEngine.outcome(key: makeKey(), bindingChain: [local],
+                                         appStanding: .allowed, trust: .applePlatform)
+        #expect(asked.decision == .ask)
+        #expect(asked.denialReason == nil)
+
+        let allowed = PolicyEngine.outcome(key: makeKey(destinations: [record([local], .approved)]),
+                                           bindingChain: [local], appStanding: .allowed, trust: .applePlatform)
+        #expect(allowed.decision == .allow)
+        #expect(allowed.denialReason == nil)
+    }
+
+    private func makeLockedKey() -> KeyMetadata {
+        KeyMetadata(
+            name: "test", keyDescription: "", authRequired: false, locked: true,
+            publicKey: Data(count: 65), createdAt: Date(timeIntervalSince1970: 0)
+        )
+    }
 }
 
 @Suite struct BranchRuleTests {

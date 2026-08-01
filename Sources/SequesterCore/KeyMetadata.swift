@@ -74,9 +74,7 @@ public struct BranchRule: Codable, Hashable, Sendable, Identifiable {
 /// material itself. Stored as JSON in the keychain item's generic attribute.
 public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
 
-    /// Renameable presentation label. The on-disk .pub filename is derived
-    /// from the key material instead, so ssh config references survive
-    /// renames.
+    /// Renameable presentation label.
     public var name: String
     public var keyDescription: String
     /// Whether the Enclave demands user presence per signature. Baked into
@@ -147,7 +145,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         OpenSSH.fingerprintMD5(blob: publicKeyBlob)
     }
 
-    /// Stable stem of the on-disk public key file, derived from the key.
+    /// Stem of the on-disk public key file.
     public var publicKeyFileStem: String {
         OpenSSH.fileStem(blob: publicKeyBlob)
     }

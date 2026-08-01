@@ -34,7 +34,7 @@ struct EditKeySheet: View {
                 TextField("Comment", text: $comment,
                           prompt: Text("\(name.isEmpty ? "name" : name)@sequester"))
             } footer: {
-                Text("The public key comment defaults to name@sequester. The public key filename is derived from the key itself, so renaming never breaks SSH config.")
+                Text("The public key comment defaults to name@sequester.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -34,7 +34,7 @@ struct DialogApprover: SigningApprover {
             backing: .buffered,
             defer: false
         )
-        window.title = "Sequester"
+        window.title = "Signing Request"
         window.isReleasedWhenClosed = false
         window.level = .modalPanel
 
@@ -44,7 +44,9 @@ struct DialogApprover: SigningApprover {
             verified: request.provenance.identityKey != nil,
             appDecisionNeeded: request.appStanding == .unknown,
             hops: hops,
-            canName: !request.bindingChain.isEmpty,
+            // Offer the naming field only when there is a destination that is
+            // not already named; a named host has nothing to name again.
+            canName: request.bindingChain.last.map { HostNames.shared.name(for: $0.fingerprint) == nil } ?? false,
             canRemember: request.canRemember
         ) { result in
             decision = result

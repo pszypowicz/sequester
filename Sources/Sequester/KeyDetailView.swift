@@ -13,7 +13,6 @@ struct KeyDetailView: View {
     @State private var errorMessage: String?
     @State private var namingTarget: NamingTarget?
     @State private var collapsed: Set<String> = []
-    @State private var appOverridesExpanded = false
 
     var body: some View {
         Form {
@@ -63,97 +62,96 @@ struct KeyDetailView: View {
                     .foregroundStyle(.red)
             }
 
+            let tree = DestinationTree.build(key.destinations)
+            let localRows = tree.localRows()
+            let forwardedRows = tree.forwardedRows(collapsed: collapsed)
+
             Section {
-                if key.destinations.isEmpty {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("No usage yet")
-                        Text("Destination hosts appear here as the key gets used, each one the binding chain a request took, with forwarding hops as branches.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 2)
+                if localRows.isEmpty {
+                    Text("No local connections yet. A direct connection (no forwarding hop) appears here once the key is used for it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 2)
                 } else {
-                    ForEach(DestinationTree.build(key.destinations).rows(collapsed: collapsed)) { row in
-                        DestinationRowView(
-                            row: row,
-                            allowApprove: !key.authRequired,
-                            label: { hostNames.label(for: $0) },
-                            branchState: rowState,
-                            isCollapsed: { collapsed.contains($0) },
-                            onToggle: { id in
-                                if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
-                            },
-                            onRecordState: { id, state in store.setDestinationState(name: key.name, id: id, state: state) },
-                            onBranchState: { hops, state in store.setBranchRule(name: key.name, hops: hops, state: state) },
-                            onDelete: { id in store.removeDestination(name: key.name, id: id) },
-                            onDeleteBranch: { hops in store.removeDestinationsUnder(name: key.name, prefix: hops) },
-                            onName: { namingTarget = NamingTarget(id: $0) }
-                        )
-                        .listRowBackground(rowTint(for: row))
+                    ForEach(localRows) { row in
+                        destinationRow(row, flat: true)
                     }
                 }
             } header: {
-                sectionHeader("Destinations", info: "Each row is a binding chain: forwarding hops branch, and the last host key is the destination host reached. A standing on a hop covers every chain through it. A block anywhere on the chain wins; otherwise the most specific standing applies.")
+                sectionHeader("Local destinations", info: "Destinations reached directly, with no forwarding hop. A standing here signs, asks, or blocks that host for this key.")
             }
 
             Section {
-                DisclosureGroup(isExpanded: $appOverridesExpanded) {
-                    if key.appRules.isEmpty {
-                        Text("No per-key overrides. This key uses the global app authorizations.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(key.appRules) { rule in
-                            HStack(spacing: 10) {
-                                Image(systemName: rule.state == .blocked ? "xmark.shield.fill" : "checkmark.shield.fill")
-                                    .foregroundStyle(rule.state == .blocked ? .red : .green)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(rule.displayName)
-                                    Text(rule.identity)
-                                        .font(.system(.caption2, design: .monospaced))
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                }
-                                Spacer()
-                                Picker("", selection: appRuleBinding(rule)) {
-                                    Text("Allowed").tag(AppState.allowed)
-                                    Text("Blocked").tag(AppState.blocked)
-                                }
-                                .pickerStyle(.segmented)
-                                .fixedSize()
-                                Button {
-                                    store.removeAppRule(name: key.name, identity: rule.identity)
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                            .padding(.vertical, 2)
-                        }
+                if forwardedRows.isEmpty {
+                    Text("No forwarded connections yet. A request that arrives through an agent forwarding hop appears here as a route.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 2)
+                } else {
+                    ForEach(forwardedRows) { row in
+                        destinationRow(row)
                     }
-                    let candidates = appAuth.authorizations.filter { auth in
-                        !key.appRules.contains { $0.identity == auth.identity }
-                    }
-                    if !candidates.isEmpty {
-                        Menu("Add override…") {
-                            ForEach(candidates) { auth in
-                                Menu(auth.displayName) {
-                                    Button("Allow for this key") {
-                                        store.setAppRule(name: key.name, identity: auth.identity,
-                                                         displayName: auth.displayName, state: .allowed)
-                                    }
-                                    Button("Block for this key") {
-                                        store.setAppRule(name: key.name, identity: auth.identity,
-                                                         displayName: auth.displayName, state: .blocked)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    sectionHeader("App overrides", info: "Override the global authorization of a specific app for this key only. A blocked app is denied; an allowed app still follows this key's destination rules.")
                 }
+            } header: {
+                sectionHeader("Forwarded destinations", info: "Destinations reached through one or more forwarding hops. Forwarding hops branch, and the last host key is the destination reached. A standing on a hop covers every chain through it, and a block anywhere on the chain wins.")
+            }
+
+            Section {
+                if key.appRules.isEmpty {
+                    Text("No per-key overrides. This key uses the global app authorizations.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(key.appRules) { rule in
+                        HStack(spacing: 10) {
+                            Image(systemName: rule.state == .blocked ? "xmark.shield.fill" : "checkmark.shield.fill")
+                                .foregroundStyle(rule.state == .blocked ? .red : .green)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(rule.displayName)
+                                Text(rule.identity)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            Spacer()
+                            Picker("", selection: appRuleBinding(rule)) {
+                                Text("Allowed").tag(AppState.allowed)
+                                Text("Blocked").tag(AppState.blocked)
+                            }
+                            .pickerStyle(.segmented)
+                            .fixedSize()
+                            Button {
+                                store.removeAppRule(name: key.name, identity: rule.identity)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                let candidates = appAuth.authorizations.filter { auth in
+                    !key.appRules.contains { $0.identity == auth.identity }
+                }
+                if !candidates.isEmpty {
+                    Menu("Add override…") {
+                        ForEach(candidates) { auth in
+                            Menu(auth.displayName) {
+                                Button("Allow for this key") {
+                                    store.setAppRule(name: key.name, identity: auth.identity,
+                                                     displayName: auth.displayName, state: .allowed)
+                                }
+                                Button("Block for this key") {
+                                    store.setAppRule(name: key.name, identity: auth.identity,
+                                                     displayName: auth.displayName, state: .blocked)
+                                }
+                            }
+                        }
+                    }
+                }
+            } header: {
+                sectionHeader("App overrides", info: "Override the global authorization of a specific app for this key only. A blocked app is denied; an allowed app still follows this key's destination rules.")
             }
         }
         .formStyle(.grouped)
@@ -174,6 +172,27 @@ struct KeyDetailView: View {
             Text(title)
             InfoDot(text: info)
         }
+    }
+
+    @ViewBuilder
+    private func destinationRow(_ row: DestinationRow, flat: Bool = false) -> some View {
+        DestinationRowView(
+            row: row,
+            flat: flat,
+            allowApprove: !key.authRequired,
+            label: { hostNames.label(for: $0) },
+            branchState: rowState,
+            isCollapsed: { collapsed.contains($0) },
+            onToggle: { id in
+                if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
+            },
+            onRecordState: { id, state in store.setDestinationState(name: key.name, id: id, state: state) },
+            onBranchState: { hops, state in store.setBranchRule(name: key.name, hops: hops, state: state) },
+            onDelete: { id in store.removeDestination(name: key.name, id: id) },
+            onDeleteBranch: { hops in store.removeDestinationsUnder(name: key.name, prefix: hops) },
+            onName: { namingTarget = NamingTarget(id: $0) }
+        )
+        .listRowBackground(rowTint(for: row))
     }
 
     private var lockedBinding: Binding<Bool> {
@@ -322,6 +341,9 @@ private struct DestinationRowView: View {
     private static let slotWidth: CGFloat = 18
 
     let row: DestinationRow
+    /// A flat row has no forwarding tree, so it drops the indent and the
+    /// disclosure slot entirely (used by the Local list).
+    var flat: Bool = false
     let allowApprove: Bool
     let label: (String) -> String
     let branchState: ([BindingHop]) -> DestinationState
@@ -335,8 +357,10 @@ private struct DestinationRowView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Color.clear.frame(width: CGFloat(row.depth) * Self.indentWidth, height: 0)
-            disclosure
+            if !flat {
+                Color.clear.frame(width: CGFloat(row.depth) * Self.indentWidth, height: 0)
+                disclosure
+            }
             content
             Spacer(minLength: 8)
             controls
@@ -407,6 +431,7 @@ private struct DestinationRowView: View {
             }
         } label: {
             Image(systemName: "trash")
+                .foregroundStyle(.red)
         }
         .buttonStyle(.borderless)
         .help(row.isRoute ? "Forget all destinations through this hop" : "Forget this destination")

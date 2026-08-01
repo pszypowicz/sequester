@@ -2,7 +2,7 @@
 
 > **Beta:** Sequester is pre-1.0. Backward compatibility is not guaranteed until version 1.0.0.
 
-A macOS menu bar app that keeps SSH keys in the Secure Enclave and serves them to ssh through the standard agent protocol. Private keys are generated inside the Enclave and cannot be exported, so there is no key file on disk to steal. Each key's public half is written to disk under a filename derived from the key material, so per-host `IdentityFile` entries in ssh config keep working and never break when a key is renamed.
+A macOS menu bar app that keeps SSH keys in the Secure Enclave and serves them to ssh through the standard agent protocol. Private keys are generated inside the Enclave and cannot be exported, so there is no key file on disk to steal. Each key's public half is written to disk so ssh config can reference it with a per-host `IdentityFile` entry.
 
 Sequester adds a per-key signing policy aimed at agent-forwarding abuse. When you forward your agent to a remote host, a compromised host can request signatures with any of your keys and hop onward to other servers. Sequester lets each key declare how it behaves when that happens.
 
@@ -35,7 +35,7 @@ A key is created with four settings:
 | Description          | Yes                                                                       |
 | Approval settings    | Yes                                                                       |
 
-The on-disk `.pub` filename is derived from a hash of the key material, so it is stable for the life of the key. The file is the contract ssh config references, and the name is only a label. Deleting a key destroys it permanently, and there is nothing to export.
+The `.pub` file is what ssh config references; the name is only a display label. Deleting a key destroys it permanently, and there is nothing to export.
 
 ## Approval
 

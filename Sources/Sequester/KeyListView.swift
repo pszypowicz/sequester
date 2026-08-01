@@ -10,15 +10,30 @@ enum SidebarItem: Hashable {
 struct KeyListView: View {
 
     @Environment(KeyStore.self) private var store
+    @Environment(\.openWindow) private var openWindow
+    @State private var navigator = Navigator.shared
     @State private var selection: SidebarItem? = .general
     @State private var showCreate = false
     @State private var editCandidate: KeyMetadata?
     @State private var deleteCandidate: KeyMetadata?
 
+    /// Titlebar text that names the section the user is in, so the window
+    /// tells you where you are the same way the sidebar does.
+    private var windowTitle: String {
+        switch selection {
+        case .apps:
+            return "Apps"
+        case .key(let name):
+            return "Keys - \(name)"
+        case .general, .none:
+            return "Settings"
+        }
+    }
+
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                Label("General", systemImage: "gearshape")
+                Label("Settings", systemImage: "gearshape")
                     .tag(SidebarItem.general)
                 Label("Apps", systemImage: "app.badge.checkmark")
                     .tag(SidebarItem.apps)
@@ -82,6 +97,7 @@ struct KeyListView: View {
                 SetupView()
             }
         }
+        .navigationTitle(windowTitle)
         .sheet(isPresented: $showCreate) {
             CreateKeySheet()
         }
@@ -99,5 +115,21 @@ struct KeyListView: View {
                 }
             }
         }
+        // Hand the window-opening action to the navigator so a notification
+        // click can reopen this window, and honor a jump requested while the
+        // window was closed (applied here) or already open (onChange).
+        .onAppear {
+            navigator.openWindow = openWindow
+            applyPendingSelection()
+        }
+        .onChange(of: navigator.pendingSelection) {
+            applyPendingSelection()
+        }
+    }
+
+    private func applyPendingSelection() {
+        guard let pending = navigator.pendingSelection else { return }
+        selection = pending
+        navigator.pendingSelection = nil
     }
 }
