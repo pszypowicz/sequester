@@ -32,6 +32,7 @@ struct SequesterApp: App {
         // Launching (e.g. at login) starts only the agent and the menu bar
         // icon. Relaunching while running reopens this window instead.
         .defaultLaunchBehavior(.suppressed)
+        .commands { AboutCommands() }
 
         Window("About Sequester", id: "about") {
             AboutView()
@@ -41,6 +42,21 @@ struct SequesterApp: App {
 
         MenuBarExtra("Sequester", systemImage: "key.fill", isInserted: $showMenuBarIcon) {
             MenuContent()
+        }
+    }
+}
+
+/// Points the standard app-menu "About Sequester" at the custom About window,
+/// so both About entry points open the same window rather than the app menu
+/// falling through to the system about panel.
+struct AboutCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About Sequester") {
+                openWindow(id: "about")
+            }
         }
     }
 }
