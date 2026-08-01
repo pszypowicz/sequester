@@ -13,7 +13,7 @@ struct KeyListView: View {
     @State private var selection: SidebarItem? = .general
     @State private var showCreate = false
     @State private var editCandidate: KeyMetadata?
-    @State private var deleteCandidate: String?
+    @State private var deleteCandidate: KeyMetadata?
 
     var body: some View {
         NavigationSplitView {
@@ -47,7 +47,7 @@ struct KeyListView: View {
                             }
                             Divider()
                             Button("Delete \"\(key.name)\"…", role: .destructive) {
-                                deleteCandidate = key.name
+                                deleteCandidate = key
                             }
                         }
                     }
@@ -92,23 +92,12 @@ struct KeyListView: View {
                 }
             }
         }
-        .confirmationDialog(
-            "Delete \"\(deleteCandidate ?? "")\"?",
-            isPresented: Binding(
-                get: { deleteCandidate != nil },
-                set: { if !$0 { deleteCandidate = nil } }
-            )
-        ) {
-            Button("Delete", role: .destructive) {
-                guard let name = deleteCandidate else { return }
-                try? store.delete(name: name)
-                if selection == .key(name) {
+        .sheet(item: $deleteCandidate) { key in
+            DeleteKeySheet(key: key) {
+                if selection == .key(key.name) {
                     selection = .general
                 }
-                deleteCandidate = nil
             }
-        } message: {
-            Text("The Secure Enclave key is destroyed and its public key file is removed. Hosts using this key will stop accepting logins. This cannot be undone.")
         }
     }
 }

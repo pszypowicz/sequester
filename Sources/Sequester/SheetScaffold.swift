@@ -6,6 +6,7 @@ import SwiftUI
 struct SheetScaffold<Content: View>: View {
 
     let primaryTitle: String
+    var primaryRole: ButtonRole? = nil
     var primaryDisabled: Bool = false
     var error: String?
     let size: CGSize
@@ -28,7 +29,7 @@ struct SheetScaffold<Content: View>: View {
                 }
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
-                Button(primaryTitle, action: onPrimary)
+                Button(primaryTitle, role: primaryRole, action: onPrimary)
                     .keyboardShortcut(.defaultAction)
                     .disabled(primaryDisabled)
             }
