@@ -34,7 +34,8 @@ struct SecretsDialogApprover: SecretsApprover {
             tier: request.tier,
             variableNames: request.variableNames,
             requester: request.requester,
-            offersGrace: request.offersGrace
+            offersGrace: request.offersGrace,
+            graceSeconds: request.graceSeconds
         ) { result in
             decision = result
             NSApp.stopModal()

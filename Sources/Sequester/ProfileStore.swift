@@ -59,6 +59,11 @@ final class ProfileStore {
         reload()
     }
 
+    func setRememberSeconds(name: String, seconds: TimeInterval) throws {
+        try EnclaveProfileStore.setRememberSeconds(name: name, seconds: seconds)
+        reload()
+    }
+
     func setExportDisabled(name: String, disabled: Bool) throws {
         try EnclaveProfileStore.setExportDisabled(name: name, disabled: disabled)
         reload()

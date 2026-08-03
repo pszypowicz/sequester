@@ -101,6 +101,11 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     /// Per-key overrides of an app's standing, taking precedence over the
     /// global authorization for this key.
     public var appRules: [AppRule]
+    /// How long a Touch ID tap is remembered for this key, in seconds.
+    /// Zero, the default, means every signature prompts. A window only ever
+    /// covers the exact destination path it was granted for, and never a
+    /// path that arrived through a forwarding hop.
+    public var rememberSeconds: TimeInterval
     /// Optional public key comment. When nil or empty the .pub file and the
     /// agent use "<name>@sequester", which tracks renames; a custom value
     /// (such as an email) is used verbatim.
@@ -117,6 +122,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
                 autoApprove: Bool = false, locked: Bool = false,
                 destinations: [DestinationRecord] = [],
                 branchRules: [BranchRule] = [], appRules: [AppRule] = [],
+                rememberSeconds: TimeInterval = 0,
                 comment: String? = nil, publicKey: Data, createdAt: Date) {
         self.name = name
         self.keyDescription = keyDescription
@@ -128,6 +134,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         self.destinations = destinations
         self.branchRules = branchRules
         self.appRules = appRules
+        self.rememberSeconds = rememberSeconds
         self.comment = comment
         self.publicKey = publicKey
         self.createdAt = createdAt

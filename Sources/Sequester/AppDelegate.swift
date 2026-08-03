@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         EnclaveKeyStore.syncPublicKeyFiles()
+        AuthorizationWindows.shared.startObservingLock()
         let agent = Agent(approver: DialogApprover(), notifier: NotificationNotifier())
         let server = MessageServer(socketPath: SequesterPaths.socketURL.path,
                                    service: AgentService(agent: agent))
