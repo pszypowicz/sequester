@@ -11,6 +11,7 @@ struct VariableColumnHeader: View {
         HStack(spacing: 8) {
             Text("Name")
                 .frame(width: Self.nameWidth, alignment: .leading)
+            Divider()
             Text("Value")
             Spacer()
             Color.clear.frame(width: 20, height: 1)

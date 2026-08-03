@@ -50,7 +50,8 @@ struct CreateProfileSheet: View {
                             .labelsHidden()
                             .font(.system(.body, design: .monospaced))
                             .frame(width: VariableColumnHeader.nameWidth)
-                        SecureField("Value", text: $entry.value)
+                        Divider()
+                        SecureField("Value", text: $entry.value, prompt: Text("ghp_example"))
                             .labelsHidden()
                         Button {
                             entries.removeAll { $0.id == entry.id }

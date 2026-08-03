@@ -50,6 +50,7 @@ struct EditProfileValuesSheet: View {
                             .strikethrough(entry.removed)
                             .foregroundStyle(entry.removed ? .secondary : .primary)
                             .frame(width: VariableColumnHeader.nameWidth, alignment: .leading)
+                        Divider()
                         SecureField("Value", text: $entry.value, prompt: Text("Leave blank to keep"))
                             .labelsHidden()
                             .disabled(entry.removed)
@@ -68,7 +69,8 @@ struct EditProfileValuesSheet: View {
                             .labelsHidden()
                             .font(.system(.body, design: .monospaced))
                             .frame(width: VariableColumnHeader.nameWidth)
-                        SecureField("Value", text: $entry.value)
+                        Divider()
+                        SecureField("Value", text: $entry.value, prompt: Text("ghp_example"))
                             .labelsHidden()
                         Button {
                             added.removeAll { $0.id == entry.id }
