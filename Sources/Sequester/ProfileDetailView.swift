@@ -22,7 +22,7 @@ struct ProfileDetailView: View {
         Form {
             Section {
                 LabeledContent("Name", value: profile.name)
-                LabeledContent("Touch ID") {
+                LabeledContent("Security") {
                     HStack(spacing: 4) {
                         Text(profile.tier.displayLabel)
                         InfoDot(text: enforcementInfo)
@@ -30,9 +30,6 @@ struct ProfileDetailView: View {
                 }
                 LabeledContent("Created", value: profile.createdAt.formatted(date: .abbreviated, time: .shortened))
                 LabeledContent("Updated", value: profile.updatedAt.formatted(date: .abbreviated, time: .shortened))
-                if let lastRead = profile.lastRead {
-                    LabeledContent("Last read", value: lastRead.formatted(date: .abbreviated, time: .shortened))
-                }
             }
 
             Section("Access") {

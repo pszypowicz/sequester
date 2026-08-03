@@ -31,7 +31,7 @@ struct CreateProfileSheet: View {
                 TextField("Name", text: $name, prompt: Text("e.g. deploy"))
             }
             Section {
-                Picker("Touch ID", selection: $tier) {
+                Picker("Security", selection: $tier) {
                     ForEach(SecretTier.allCases, id: \.self) { tier in
                         Text(tier.displayLabel).tag(tier)
                     }

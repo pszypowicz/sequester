@@ -28,14 +28,19 @@ public struct Provenance: Sendable, Hashable {
     public let trust: Trust
     public let signingIdentifier: String?
     public let teamID: String?
+    /// Human name from the Developer ID leaf certificate, display only.
+    /// Policy keys stay on the team id, which survives certificate renewal.
+    public let developerName: String?
 
     public init(pid: pid_t, path: String?, trust: Trust = .unverified,
-                signingIdentifier: String? = nil, teamID: String? = nil) {
+                signingIdentifier: String? = nil, teamID: String? = nil,
+                developerName: String? = nil) {
         self.pid = pid
         self.path = path
         self.trust = trust
         self.signingIdentifier = signingIdentifier
         self.teamID = teamID
+        self.developerName = developerName
     }
 
     public var isVerified: Bool { trust != .unverified }
@@ -55,13 +60,19 @@ public struct Provenance: Sendable, Hashable {
     /// Trustworthy, user-facing label. For verified peers the name comes from
     /// the code signature (via `SecCodeCopyPath`), not the attacker-controlled
     /// filename; the unverified name is the sanitized basename, quoted and
-    /// flagged so it never reads as an authoritative identity.
+    /// flagged so it never reads as an authoritative identity. A Developer ID
+    /// peer shows the developer name from its certificate, the same source
+    /// Gatekeeper's dialogs use, with the team id as the fallback.
     public var displayName: String {
         let base = Self.sanitizedBasename(path: path, pid: pid)
         switch trust {
         case .applePlatform:
             return "\(base) (Apple)"
         case .developerID:
+            if let developerName {
+                let clean = Self.sanitize(developerName)
+                if !clean.isEmpty { return "\(base) (\(clean))" }
+            }
             if let teamID { return "\(base) (Team \(teamID))" }
             return "\(base) (signed)"
         case .unverified:
@@ -136,7 +147,8 @@ public enum ProvenanceTracer {
             path: identity.path ?? pathForPid(pid),
             trust: identity.trust,
             signingIdentifier: identity.signingIdentifier,
-            teamID: identity.teamID
+            teamID: identity.teamID,
+            developerName: identity.developerName
         )
     }
 
@@ -189,7 +201,8 @@ public enum ProvenanceTracer {
             path: identity.path ?? pathForPid(target),
             trust: identity.trust,
             signingIdentifier: identity.signingIdentifier,
-            teamID: identity.teamID
+            teamID: identity.teamID,
+            developerName: identity.developerName
         )
         return (provenance, "\(target).\(processStartTime(target))")
     }
@@ -239,6 +252,7 @@ enum CodeSignatureInspector {
         var signingIdentifier: String?
         var teamID: String?
         var path: String?
+        var developerName: String?
 
         static let unverified = Result(trust: .unverified, signingIdentifier: nil, teamID: nil, path: nil)
     }
@@ -291,7 +305,36 @@ enum CodeSignatureInspector {
         } else {
             trust = .unverified
         }
-        return Result(trust: trust, signingIdentifier: signingID, teamID: teamID, path: path)
+        return Result(trust: trust, signingIdentifier: signingID, teamID: teamID, path: path,
+                      developerName: trust == .developerID ? leafDeveloperName(info) : nil)
+    }
+
+    /// The developer name from the leaf certificate of a verified Developer
+    /// ID signature, for display. The chain rides in the signing-information
+    /// dictionary the inspection already fetched.
+    private static func leafDeveloperName(_ info: [String: Any]?) -> String? {
+        guard let chain = info?[kSecCodeInfoCertificates as String] as? [AnyObject],
+              let first = chain.first,
+              CFGetTypeID(first) == SecCertificateGetTypeID() else {
+            return nil
+        }
+        let leaf = first as! SecCertificate
+        guard let summary = SecCertificateCopySubjectSummary(leaf) as String? else { return nil }
+        return developerName(fromSubjectSummary: summary)
+    }
+
+    /// Extracts the human name from a Developer ID subject summary, e.g.
+    /// "Developer ID Application: Jane Doe (TEAM123456)" becomes "Jane Doe".
+    /// Nil for any other shape, which falls back to the team-id label.
+    static func developerName(fromSubjectSummary summary: String) -> String? {
+        let prefix = "Developer ID Application: "
+        guard summary.hasPrefix(prefix) else { return nil }
+        var name = String(summary.dropFirst(prefix.count))
+        if name.hasSuffix(")"), let open = name.range(of: " (", options: .backwards) {
+            name = String(name[..<open.lowerBound])
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// Raw status of the sandbox-gated dynamic-code lookup, for the probe.

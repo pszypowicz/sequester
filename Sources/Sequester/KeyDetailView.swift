@@ -25,7 +25,7 @@ struct KeyDetailView: View {
             }
 
             Section("Approval") {
-                LabeledContent("Touch ID", value: key.authRequired ? "Required for every signature" : "Not required")
+                LabeledContent("Security", value: key.authRequired ? "Touch ID on every signature" : "Touch ID not required")
                 if !key.authRequired {
                     Toggle(isOn: approveAllBinding) {
                         settingLabel("Approve all requests without asking",

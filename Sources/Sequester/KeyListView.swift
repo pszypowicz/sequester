@@ -82,24 +82,18 @@ struct KeyListView: View {
                             .foregroundStyle(.secondary)
                     }
                     ForEach(profileStore.profiles) { profile in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Label(profile.name, systemImage: profileIcon(profile))
-                            Text(profile.tier.displayLabel)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        .padding(.vertical, 2)
-                        .tag(SidebarItem.profile(profile.name))
-                        .contextMenu {
-                            Button("Rename…") {
-                                editProfileCandidate = profile
+                        Label(profile.name, systemImage: profileIcon(profile))
+                            .padding(.vertical, 2)
+                            .tag(SidebarItem.profile(profile.name))
+                            .contextMenu {
+                                Button("Rename…") {
+                                    editProfileCandidate = profile
+                                }
+                                Divider()
+                                Button("Delete \"\(profile.name)\"…", role: .destructive) {
+                                    deleteProfileCandidate = profile
+                                }
                             }
-                            Divider()
-                            Button("Delete \"\(profile.name)\"…", role: .destructive) {
-                                deleteProfileCandidate = profile
-                            }
-                        }
                     }
                 }
             }
