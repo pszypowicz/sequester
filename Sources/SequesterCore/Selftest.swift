@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import Darwin
+import SecretsWire
 
 /// Headless diagnostics behind hidden launch flags, so the signed app can
 /// verify its keychain entitlement and Enclave access from a terminal
@@ -9,6 +10,7 @@ import Darwin
 public enum Selftest {
 
     private static let temporaryKeyName = "selftest-tmp"
+    private static let temporaryProfileName = "selftest-tmp-profile"
 
     public static func run() -> Int32 {
         var failed = false
@@ -23,6 +25,7 @@ public enum Selftest {
         }
 
         try? EnclaveKeyStore.delete(name: temporaryKeyName)
+        try? EnclaveProfileStore.delete(name: temporaryProfileName)
 
         check("secure enclave available") {
             guard EnclaveKeyStore.isEnclaveAvailable else {
@@ -121,7 +124,92 @@ public enum Selftest {
             }
         }
 
+        check("profile cipher round trip") {
+            let key = P256.KeyAgreement.PrivateKey()
+            let values = ["SEQ_A": "alpha", "SEQ_B": "beta"]
+            let sealed = try ProfileCipher.seal(ProfileCipher.encodeValues(values), to: key.publicKey)
+            let opened = try ProfileCipher.decodeValues(try ProfileCipher.open(sealed, with: key))
+            guard opened == values else { throw CryptoKitError.authenticationFailure }
+        }
+        check("create profile (keychain + enclave)") {
+            try EnclaveProfileStore.create(name: temporaryProfileName, tier: .policyOnly,
+                                           exportDisabled: false, values: ["SEQ_TEST_A": "alpha"])
+        }
+        check("profile listed") {
+            guard EnclaveProfileStore.list().contains(where: { $0.name == temporaryProfileName }) else {
+                throw KeychainError.notFound(temporaryProfileName)
+            }
+        }
+        check("profile read round trip") {
+            let values = try EnclaveProfileStore.readValues(name: temporaryProfileName, reason: "selftest")
+            guard values == ["SEQ_TEST_A": "alpha"] else { throw KeychainError.corruptItem }
+        }
+        check("profile value merge") {
+            try EnclaveProfileStore.updateValues(name: temporaryProfileName,
+                                                 setting: ["SEQ_TEST_B": "beta"], reason: "selftest")
+            let values = try EnclaveProfileStore.readValues(name: temporaryProfileName, reason: "selftest")
+            guard values == ["SEQ_TEST_A": "alpha", "SEQ_TEST_B": "beta"] else {
+                throw KeychainError.corruptItem
+            }
+            let metadata = try ProfileStorage.load(name: temporaryProfileName).metadata
+            guard metadata.variableNames == ["SEQ_TEST_A", "SEQ_TEST_B"] else {
+                throw KeychainError.corruptItem
+            }
+        }
+        check("profile metadata update") {
+            try EnclaveProfileStore.setExportDisabled(name: temporaryProfileName, disabled: true)
+            try EnclaveProfileStore.setApproveAll(name: temporaryProfileName, enabled: true)
+            try EnclaveProfileStore.setAppRule(name: temporaryProfileName, identity: "devid:TEST:selftest",
+                                               displayName: "selftest", state: .blocked)
+            var metadata = try ProfileStorage.load(name: temporaryProfileName).metadata
+            guard metadata.exportDisabled, metadata.approveAll,
+                  metadata.appRules.first?.state == .blocked else {
+                throw KeychainError.corruptItem
+            }
+            EnclaveProfileStore.removeAppRule(name: temporaryProfileName, identity: "devid:TEST:selftest")
+            metadata = try ProfileStorage.load(name: temporaryProfileName).metadata
+            guard metadata.appRules.isEmpty else { throw KeychainError.corruptItem }
+        }
+        check("profile rename") {
+            try EnclaveProfileStore.rename(name: temporaryProfileName, to: "selftest-profile-renamed")
+            try EnclaveProfileStore.rename(name: "selftest-profile-renamed", to: temporaryProfileName)
+        }
+        check("delete profile") {
+            try EnclaveProfileStore.delete(name: temporaryProfileName)
+            guard !EnclaveProfileStore.list().contains(where: { $0.name == temporaryProfileName }) else {
+                throw KeychainError.duplicate(temporaryProfileName)
+            }
+        }
+
         return failed ? 1 : 0
+    }
+
+    /// Creates a fixed-content test profile that reads without any prompt
+    /// (policy-only plus approve-all), for scripts/secrets-e2e.py.
+    public static func createProfile(name: String, exportDisabled: Bool) -> Int32 {
+        do {
+            _ = try EnclaveProfileStore.create(
+                name: name, tier: .policyOnly, exportDisabled: exportDisabled,
+                values: ["SEQ_TEST_A": "alpha", "SEQ_TEST_B": "beta"]
+            )
+            try EnclaveProfileStore.setApproveAll(name: name, enabled: true)
+            print("created \(name)")
+            return 0
+        } catch {
+            print("FAIL create \(name): \(error.localizedDescription)")
+            return 1
+        }
+    }
+
+    public static func deleteProfile(name: String) -> Int32 {
+        do {
+            try EnclaveProfileStore.delete(name: name)
+            print("deleted \(name)")
+            return 0
+        } catch {
+            print("FAIL delete \(name): \(error.localizedDescription)")
+            return 1
+        }
     }
 
     public static func createKey(name: String) -> Int32 {

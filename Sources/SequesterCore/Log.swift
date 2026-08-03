@@ -13,4 +13,7 @@ public enum Log {
     public static let server = Logger(subsystem: subsystem, category: "server")
     public static let store = Logger(subsystem: subsystem, category: "store")
     public static let app = Logger(subsystem: subsystem, category: "app")
+    /// Secrets events log the operation, profile name, requester, and
+    /// decision. Never a value.
+    public static let secrets = Logger(subsystem: subsystem, category: "secrets")
 }

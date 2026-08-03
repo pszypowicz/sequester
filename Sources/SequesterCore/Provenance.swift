@@ -174,6 +174,26 @@ public enum ProvenanceTracer {
         return "\(target).\(processStartTime(target))"
     }
 
+    /// Resolves the responsible process of a connected peer to a verified
+    /// identity, for policy keyed on the terminal or IDE rather than the
+    /// short-lived client that connected. The lookup is by pid, which is
+    /// racier than the peer audit token, but the responsible process is
+    /// long-lived and the instance id pins a reused pid via the start time.
+    public static func responsibleProvenance(forPid pid: pid_t) -> (provenance: Provenance, instanceID: String?) {
+        guard pid > 0 else { return (Provenance(pid: -1, path: nil), nil) }
+        let responsible = responsibility_get_pid_responsible_for_pid(pid)
+        let target = responsible > 0 ? responsible : pid
+        let identity = CodeSignatureInspector.inspect(pid: target)
+        let provenance = Provenance(
+            pid: target,
+            path: identity.path ?? pathForPid(target),
+            trust: identity.trust,
+            signingIdentifier: identity.signingIdentifier,
+            teamID: identity.teamID
+        )
+        return (provenance, "\(target).\(processStartTime(target))")
+    }
+
     private static func processStartTime(_ pid: pid_t) -> UInt64 {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
@@ -219,12 +239,32 @@ enum CodeSignatureInspector {
         var signingIdentifier: String?
         var teamID: String?
         var path: String?
+
+        static let unverified = Result(trust: .unverified, signingIdentifier: nil, teamID: nil, path: nil)
     }
 
     static func inspect(auditToken token: audit_token_t) -> Result {
-        let unverified = Result(trust: .unverified, signingIdentifier: nil, teamID: nil, path: nil)
+        guard let code = copyGuest(auditToken: token) else { return .unverified }
+        return inspect(code: code)
+    }
 
-        guard let code = copyGuest(auditToken: token) else { return unverified }
+    /// Pid-based lookup for a process that is not a socket peer (the
+    /// responsible process). Racier than the audit-token path: the pid could
+    /// in principle be reused between lookup and use, so callers pair the
+    /// result with a pid+start-time instance id.
+    static func inspect(pid: pid_t) -> Result {
+        var code: SecCode?
+        let attributes = [kSecGuestAttributePid: NSNumber(value: pid)] as CFDictionary
+        guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess,
+              let code else {
+            return .unverified
+        }
+        return inspect(code: code)
+    }
+
+    private static func inspect(code: SecCode) -> Result {
+        let unverified = Result.unverified
+
         // The signature must be intact and satisfy its own designated
         // requirement before any of its claimed attributes are trusted.
         guard SecCodeCheckValidity(code, [], nil) == errSecSuccess else { return unverified }

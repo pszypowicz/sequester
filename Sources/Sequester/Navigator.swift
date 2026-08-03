@@ -24,7 +24,16 @@ final class Navigator {
     /// Bring the settings window forward and select a key. Safe to call from
     /// the AppKit side.
     func showKey(_ name: String) {
-        pendingSelection = .key(name)
+        show(.key(name))
+    }
+
+    /// Bring the settings window forward and select a secrets profile.
+    func showProfile(_ name: String) {
+        show(.profile(name))
+    }
+
+    private func show(_ item: SidebarItem) {
+        pendingSelection = item
         NSApp.setActivationPolicy(.regular)
         openWindow?(id: "main")
         NSApp.activate(ignoringOtherApps: true)

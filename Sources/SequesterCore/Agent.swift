@@ -280,31 +280,9 @@ public struct Agent: Sendable {
         )
     }
 
-    /// Persists what the user chose to remember about the requesting app.
-    /// A permanent allow or block needs a verified identity; an unverified
-    /// peer can only be blocked for the session.
     private func applyAppDecision(_ scope: AppScope, session: AgentSession) {
-        let provenance = session.provenance
-        switch scope {
-        case .once:
-            break
-        case .session:
-            if let identity = provenance.identityKey, let instance = session.responsibleInstanceID {
-                AppSessionGrants.shared.allow(identity: identity, instance: instance)
-            }
-        case .always:
-            if let identity = provenance.identityKey {
-                AppAuthorizationStore.setState(identity: identity, displayName: provenance.displayName,
-                                               state: .allowed, now: Date())
-            }
-        case .block:
-            if let identity = provenance.identityKey {
-                AppAuthorizationStore.setState(identity: identity, displayName: provenance.displayName,
-                                               state: .blocked, now: Date())
-            } else if let instance = session.responsibleInstanceID {
-                AppSessionGrants.shared.block(instance: instance)
-            }
-        }
+        AppDecisionRecorder.apply(scope, provenance: session.provenance,
+                                  instanceID: session.responsibleInstanceID)
     }
 
     private func signReason(key: KeyMetadata, session: AgentSession, bindingChain: [BindingHop]) -> String {

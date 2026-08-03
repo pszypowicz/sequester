@@ -14,6 +14,7 @@ Early proof of concept. Working today:
 - SSH agent over a Unix socket (identity listing and signing).
 - Public key files on disk, one per key.
 - Per-key approval policy: per-destination standings plus block-forwarded, approve-local, approve-all, and lock, editable at any time.
+- Secrets profiles: Enclave-encrypted KEY=value sets with a per-profile Touch ID tier, per-caller policy, and a bundled CLI that loads them into a command's environment.
 - Start at login via the system login items mechanism, with no separate daemon.
 
 ## Install
@@ -55,6 +56,43 @@ Each binding's signature is verified against its host key, and a silent signatur
 
 Every signature posts a notification identifying the key and destination host, so unexpected use is visible.
 
+## Secrets profiles
+
+Sequester also stores API tokens (PATs, service-principal secrets) as secrets profiles: named sets of KEY=value pairs encrypted as one blob under a Secure Enclave key and loaded into a command's environment through a bundled CLI. The app performs the policy check, the prompt, and the decryption, and a profile decrypts as one blob, so loading several variables costs one Touch ID tap.
+
+Each profile chooses a Touch ID tier at creation, and the choice is permanent:
+
+| Tier                             | Behavior                                                                                            | Enforced by    |
+| -------------------------------- | --------------------------------------------------------------------------------------------------- | -------------- |
+| Touch ID on every read (default) | Every read prompts, even for approved apps. userPresence is baked into the key's access control.    | Secure Enclave |
+| Touch ID for unapproved callers  | Approved apps read silently. Every other caller must pass a Touch ID check the app evaluates first. | Sequester      |
+| Policy only                      | Unknown apps get an approval dialog, with no biometric check.                                       | Sequester      |
+
+Only the first tier is enforced by the hardware. The other two are app-level gates in front of a key the app could use without them, backed by verified caller identity, a signature-scoped policy store, and a notification on every read.
+
+The caller a profile authorizes is the terminal or IDE the command runs from, resolved through macOS process responsibility and verified by code signature, because the socket peer is always the bundled CLI itself. Standings work like keys: neutral asks, approved reads silently, blocked denies without a prompt, with per-profile overrides on the profile's page. Creating, updating, or deleting a profile always shows a confirmation dialog in the app, and every read posts a notification.
+
+The `sequester` CLI ships inside the app bundle. Put it on PATH once:
+
+```
+"/Applications/Sequester.app/Contents/MacOS/sequester-cli" install-cli
+```
+
+Then:
+
+```
+sequester secret set deploy GITHUB_TOKEN NPM_TOKEN   # values are prompted, never on argv
+sequester secret list
+sequester env exec deploy -- terraform apply         # recommended: values exist only in the child env
+eval "$(sequester env export deploy)"                # posix shells
+sequester env export deploy --format fish | source   # fish
+sequester secret rm deploy
+```
+
+`env exec` is the recommended path because values go straight into the child process. `env export` prints plaintext to stdout, where a terminal transcript or an AI coding agent's context can capture it, and a profile created with `--no-export` refuses it entirely. The other creation flag is `--touch-id every-read|unapproved|never`.
+
+Two limitations are accepted by design. Variables in a child's environment are readable by other processes of the same user for the child's lifetime, which envchain and the password-manager CLIs share. And a headless invocation (cron, launchd) has no terminal to attribute, so responsibility resolves to the CLI itself, and approving that identity approves anything headless.
+
 ## Setup
 
 The socket and the public key files live in the app's sandbox container. Copy the exact paths from the app (the socket path is on the General page, each key's file path is on its page) and point ssh at them:
@@ -76,6 +114,7 @@ Host myserver
 - Approval dialogs are an app-level policy layer enforced for every signature the agent performs.
 - The app runs in the App Sandbox with no network entitlement, so its file access is confined to the container and the agent process cannot phone home.
 - Key handles and metadata are stored in the login keychain.
+- Secrets profile values are encrypted to a Secure Enclave key-agreement key, and the ciphertext lives with the key handle in a single keychain item, so a co-resident process can neither read nor swap it. The secrets protocol runs on its own socket, never on the agent socket that `ssh -A` forwards to remote hosts.
 
 ## Building
 
@@ -88,11 +127,11 @@ make dev        # build and (re)launch
 make test       # unit tests
 ```
 
-`scripts/bundle.sh --identity adhoc` produces an unsigned local build. `scripts/build-icon.sh` regenerates `Resources/Sequester.icns` from `scripts/generate-icon.swift`. `scripts/agent-e2e.py` exercises the running agent end to end over the socket, and the app binary accepts a hidden `--selftest` flag that checks Enclave and keychain access headlessly.
+`scripts/bundle.sh --identity adhoc` produces an unsigned local build. `scripts/build-icon.sh` regenerates `Resources/Sequester.icns` from `scripts/generate-icon.swift`. `scripts/agent-e2e.py` exercises the running agent end to end over the socket, `scripts/secrets-e2e.py` does the same for the secrets socket, and the app binary accepts a hidden `--selftest` flag that checks Enclave and keychain access headlessly.
 
 ## Debugging
 
-The app logs to the unified logging system under the subsystem `cz.szypowi.sequester`, with categories `agent` (protocol events, sign decisions), `server` (socket lifecycle, connection provenance), `store` (key CRUD and Enclave operations), and `app` (launch, approval dialogs, login item).
+The app logs to the unified logging system under the subsystem `cz.szypowi.sequester`, with categories `agent` (protocol events, sign decisions), `server` (socket lifecycle, connection provenance), `store` (key CRUD and Enclave operations), `secrets` (profile operations and read decisions), and `app` (launch, approval dialogs, login item).
 
 Some shells ship a `log` builtin that shadows the system tool, so call it by its absolute path. Stream it live with
 

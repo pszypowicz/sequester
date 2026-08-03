@@ -113,6 +113,36 @@ public final class AppSessionGrants: @unchecked Sendable {
     }
 }
 
+/// Persists what a user chose to remember about a requesting app when
+/// answering an approval dialog. A permanent allow or block needs a verified
+/// identity; an unverified peer can only be blocked for the session. Shared
+/// by the agent and the secrets broker so both record scope decisions
+/// identically.
+public enum AppDecisionRecorder {
+    public static func apply(_ scope: AppScope, provenance: Provenance, instanceID: String?) {
+        switch scope {
+        case .once:
+            break
+        case .session:
+            if let identity = provenance.identityKey, let instance = instanceID {
+                AppSessionGrants.shared.allow(identity: identity, instance: instance)
+            }
+        case .always:
+            if let identity = provenance.identityKey {
+                AppAuthorizationStore.setState(identity: identity, displayName: provenance.displayName,
+                                               state: .allowed, now: Date())
+            }
+        case .block:
+            if let identity = provenance.identityKey {
+                AppAuthorizationStore.setState(identity: identity, displayName: provenance.displayName,
+                                               state: .blocked, now: Date())
+            } else if let instance = instanceID {
+                AppSessionGrants.shared.block(instance: instance)
+            }
+        }
+    }
+}
+
 /// Resolves the effective `AppStanding` for a request from the persisted
 /// stores plus session grants. Kept as pure data-in/decision-out so it is
 /// unit-testable without keychain or live processes.

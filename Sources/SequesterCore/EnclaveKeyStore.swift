@@ -18,6 +18,12 @@ public enum SequesterPaths {
         directory.appending(path: "agent.sock")
     }
 
+    /// The secrets protocol lives on its own socket so it is never reachable
+    /// through a forwarded SSH_AUTH_SOCK.
+    public static var secretsSocketURL: URL {
+        directory.appending(path: "secrets.sock")
+    }
+
     public static func publicKeyURL(stem: String) -> URL {
         directory.appending(path: "\(stem).pub")
     }

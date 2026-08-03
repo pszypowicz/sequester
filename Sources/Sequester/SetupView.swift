@@ -8,6 +8,10 @@ struct SetupView: View {
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @State private var loginEnabled = LoginItem.isEnabled
 
+    private var cliPath: String {
+        Bundle.main.bundleURL.appending(path: "Contents/MacOS/sequester-cli").path
+    }
+
     private var snippet: String {
         """
         Host *
@@ -24,6 +28,18 @@ struct SetupView: View {
         Form {
             Section("Agent") {
                 CopyRow(icon: "link", label: "Socket path", value: SequesterPaths.socketURL.path)
+            }
+
+            Section {
+                CopyRow(icon: "terminal", label: "Bundled CLI", value: cliPath)
+                CopyRow(icon: "link.badge.plus", label: "Put \u{201C}sequester\u{201D} on PATH",
+                        value: "\"\(cliPath)\" install-cli")
+            } header: {
+                Text("Command line")
+            } footer: {
+                Text("The CLI manages secrets profiles (sequester secret, sequester env) by talking to this app; install-cli symlinks it into /usr/local/bin.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("App") {
