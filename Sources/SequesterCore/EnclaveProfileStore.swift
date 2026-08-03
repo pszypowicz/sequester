@@ -107,6 +107,12 @@ public enum EnclaveProfileStore {
 
     /// Decrypts a profile's values. On an everyRead profile the Enclave
     /// demands user presence here, showing `reason` in its prompt.
+    ///
+    /// The LAContext must be a fresh one per read. A context that has once
+    /// satisfied the key's access control keeps that authorization for
+    /// every later operation passed the same instance, with no expiry of
+    /// its own, so caching it would turn "Touch ID on every read" into an
+    /// unbounded grace window.
     public static func readValues(name: String, reason: String) throws -> [String: String] {
         let stored = try ProfileStorage.load(name: name)
         let context = LAContext()

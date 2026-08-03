@@ -297,6 +297,11 @@ public enum EnclaveKeyStore {
     /// Signs data the SSH way for ecdsa-sha2-nistp256: SHA-256 digest,
     /// ECDSA signature returned as raw r||s. Keys created with
     /// authRequired trigger the Enclave's own Touch ID prompt here.
+    ///
+    /// The LAContext must be a fresh one per signature. A context that has
+    /// once satisfied the key's access control keeps that authorization for
+    /// every later operation passed the same instance, with no expiry of
+    /// its own, so caching it would silently drop the per-signature prompt.
     public static func sign(name: String, data: Data, reason: String) throws -> Data {
         let stored = try KeyStorage.load(name: name)
         Log.store.debug("Signing \(data.count, privacy: .public) bytes with \(name, privacy: .public), Touch ID \(stored.metadata.authRequired, privacy: .public)")
