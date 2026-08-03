@@ -7,6 +7,7 @@ struct SetupView: View {
 
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
     @State private var loginEnabled = LoginItem.isEnabled
+    @State private var snippetFlash = CopyFlash()
 
     private var cliPath: String {
         Bundle.main.bundleURL.appending(path: "Contents/MacOS/sequester-cli").path
@@ -67,8 +68,13 @@ struct SetupView: View {
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Button("Copy Config Snippet") {
+                Button {
                     copyToPasteboard(snippet)
+                    snippetFlash.trigger()
+                } label: {
+                    Label(snippetFlash.active ? "Copied" : "Copy Config Snippet",
+                          systemImage: snippetFlash.active ? "checkmark" : "doc.on.doc")
+                        .foregroundStyle(snippetFlash.active ? AnyShapeStyle(.green) : AnyShapeStyle(.tint))
                 }
             }
 
