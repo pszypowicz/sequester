@@ -5,7 +5,8 @@ import SequesterCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private var server: AgentServer?
+    private var server: MessageServer<AgentService>?
+    private var secretsServer: MessageServer<SecretsService>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.app.log("Sequester launched, login item \(LoginItem.isEnabled, privacy: .public)")
@@ -19,12 +20,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         EnclaveKeyStore.syncPublicKeyFiles()
         let agent = Agent(approver: DialogApprover(), notifier: NotificationNotifier())
-        let server = AgentServer(socketPath: SequesterPaths.socketURL.path, agent: agent)
+        let server = MessageServer(socketPath: SequesterPaths.socketURL.path,
+                                   service: AgentService(agent: agent))
         do {
             try server.start()
             self.server = server
         } catch {
             Log.app.error("Agent failed to start: \(error.localizedDescription, privacy: .public)")
+        }
+
+        let broker = SecretsBroker(approver: SecretsDialogApprover(),
+                                   notifier: SecretsNotificationNotifier())
+        let secretsServer = MessageServer(socketPath: SequesterPaths.secretsSocketURL.path,
+                                          service: SecretsService(broker: broker))
+        do {
+            try secretsServer.start()
+            self.secretsServer = secretsServer
+        } catch {
+            Log.app.error("Secrets service failed to start: \(error.localizedDescription, privacy: .public)")
         }
 
         // The settings window promotes the app to a regular one (menu bar,
@@ -68,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         Log.app.log("Sequester terminating")
         server?.stop()
+        secretsServer?.stop()
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
@@ -91,18 +105,22 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound])
     }
 
-    /// Clicking a signature notification jumps to the key it names. The key
-    /// name travels in the request's userInfo; nothing else is captured, so
-    /// the non-Sendable response never crosses to the main actor.
+    /// Clicking a notification jumps to the key or profile it names. Only
+    /// the name travels in the request's userInfo; nothing else is captured,
+    /// so the non-Sendable response never crosses to the main actor.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let keyName = response.notification.request.content.userInfo["keyName"] as? String
+        let userInfo = response.notification.request.content.userInfo
+        let keyName = userInfo["keyName"] as? String
+        let profileName = userInfo["profileName"] as? String
         Task { @MainActor in
             if let keyName {
                 Navigator.shared.showKey(keyName)
+            } else if let profileName {
+                Navigator.shared.showProfile(profileName)
             }
         }
         completionHandler()

@@ -8,6 +8,7 @@ struct SequesterApp: App {
     @State private var store = KeyStore()
     @State private var hostNames = HostNameStore()
     @State private var appAuth = AppAuthStore()
+    @State private var profiles = ProfileStore()
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
 
     init() {
@@ -20,6 +21,7 @@ struct SequesterApp: App {
                 .environment(store)
                 .environment(hostNames)
                 .environment(appAuth)
+                .environment(profiles)
                 .onAppear {
                     // Whatever path opened the window, present it like a
                     // regular app: with a menu bar and a Dock icon. The
@@ -78,6 +80,18 @@ enum SelftestCLI {
         if let index = arguments.firstIndex(of: "--selftest-delete-key"),
            index + 1 < arguments.count {
             exit(Selftest.deleteKey(name: arguments[index + 1]))
+        }
+        if let index = arguments.firstIndex(of: "--selftest-create-profile"),
+           index + 1 < arguments.count {
+            exit(Selftest.createProfile(name: arguments[index + 1], exportDisabled: false))
+        }
+        if let index = arguments.firstIndex(of: "--selftest-create-profile-noexport"),
+           index + 1 < arguments.count {
+            exit(Selftest.createProfile(name: arguments[index + 1], exportDisabled: true))
+        }
+        if let index = arguments.firstIndex(of: "--selftest-delete-profile"),
+           index + 1 < arguments.count {
+            exit(Selftest.deleteProfile(name: arguments[index + 1]))
         }
     }
 }

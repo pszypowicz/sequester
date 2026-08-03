@@ -35,6 +35,11 @@ cd "$(cd "$(dirname "$0")/.." && pwd)"
 VERSION=$(head -1 VERSION 2>/dev/null | tr -d '[:space:]')
 [ -n "$VERSION" ] || { echo "error: VERSION file missing or empty" >&2; exit 1; }
 
+# A VERSION-only bump changes no compiler input, so the build system would
+# skip the metadata plugin's prebuild command and reuse binaries reporting
+# the previous version and git hash. Dropping the plugin outputs forces the
+# metadata to regenerate and the consuming targets to recompile.
+rm -rf .build/plugins/outputs
 swift build -c release
 
 APP=".build/Sequester.app/Contents"
@@ -42,6 +47,7 @@ rm -rf ".build/Sequester.app"
 mkdir -p "$APP/MacOS" "$APP/Resources"
 
 cp .build/release/Sequester "$APP/MacOS/Sequester"
+cp .build/release/sequester-cli "$APP/MacOS/sequester-cli"
 cp Sources/Sequester/Info.plist "$APP/Info.plist"
 # Both version fields come from VERSION; the plist's placeholders are never shipped.
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Info.plist"
@@ -55,7 +61,11 @@ fi
 
 ENTITLEMENTS="Sources/Sequester/Sequester.entitlements"
 
+# The bundle-level codesign does not sign nested executables, so the CLI
+# gets its own signature first. No entitlements: it must stay unsandboxed
+# to reach /dev/tty, exec arbitrary commands, and write /usr/local/bin.
 if [[ "$identity" == "adhoc" ]]; then
+  codesign --sign - --force --options runtime "$APP/MacOS/sequester-cli"
   codesign --sign - --force --options runtime --entitlements "$ENTITLEMENTS" .build/Sequester.app
 else
   # || true: with set -e, a failing security query (locked/absent
@@ -70,6 +80,7 @@ else
     exit 1
   fi
   # --timestamp: notarization requires a secure timestamp.
+  codesign --sign "$sign" --force --options runtime --timestamp "$APP/MacOS/sequester-cli"
   codesign --sign "$sign" --force --options runtime --timestamp --entitlements "$ENTITLEMENTS" .build/Sequester.app
 fi
 

@@ -10,19 +10,30 @@ final class AppAuthStore {
 
     private(set) var authorizations: [AppAuthorization] = []
 
-    @ObservationIgnored nonisolated(unsafe) private var observer: (any NSObjectProtocol)?
+    @ObservationIgnored nonisolated(unsafe) private var observers: [any NSObjectProtocol] = []
 
     init() {
         reload()
-        observer = NotificationCenter.default.addObserver(
-            forName: .sequesterAppsDidChange, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload() }
-        }
+        observers = [
+            NotificationCenter.default.addObserver(
+                forName: .sequesterAppsDidChange, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reload() }
+            },
+            // The change notification is in-process, so a second
+            // instance run from a terminal can edit the keychain
+            // without this one hearing it. Refresh whenever the app
+            // comes forward, which is when a stale list would show.
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reload() }
+            },
+        ]
     }
 
     deinit {
-        if let observer {
+        for observer in observers {
             NotificationCenter.default.removeObserver(observer)
         }
     }

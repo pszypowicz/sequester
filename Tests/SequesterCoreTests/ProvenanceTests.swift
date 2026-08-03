@@ -85,6 +85,32 @@ import Foundation
         #expect(p.displayName == "Foo (Team ABCDE12345)")
     }
 
+    @Test func developerIDLabelPrefersCertificateName() {
+        let p = Provenance(pid: 1, path: "/Applications/Foo.app", trust: .developerID,
+                           signingIdentifier: "com.example.Foo", teamID: "ABCDE12345",
+                           developerName: "Jane Doe")
+        #expect(p.displayName == "Foo (Jane Doe)")
+        // The policy key ignores the display name and stays on the team id.
+        #expect(p.identityKey == "devid:ABCDE12345:com.example.Foo")
+    }
+
+    @Test func certificateNameIsSanitizedInLabel() {
+        let p = Provenance(pid: 1, path: "/Applications/Foo.app", trust: .developerID,
+                           signingIdentifier: "com.example.Foo", teamID: "ABCDE12345",
+                           developerName: "Jane\u{202E} \"Doe\"")
+        #expect(p.displayName == "Foo (Jane Doe)")
+    }
+
+    @Test func developerNameParsing() {
+        #expect(CodeSignatureInspector.developerName(
+            fromSubjectSummary: "Developer ID Application: Jane Doe (ABCDE12345)") == "Jane Doe")
+        #expect(CodeSignatureInspector.developerName(
+            fromSubjectSummary: "Developer ID Application: Example Corp, Inc. (ABCDE12345)") == "Example Corp, Inc.")
+        #expect(CodeSignatureInspector.developerName(fromSubjectSummary: "Software Signing") == nil)
+        #expect(CodeSignatureInspector.developerName(fromSubjectSummary: "Developer ID Application: ") == nil)
+        #expect(CodeSignatureInspector.developerName(fromSubjectSummary: "Apple Development: Jane Doe (X)") == nil)
+    }
+
     @Test func bundlePathDropsDotAppSuffix() {
         // SecCodeCopyPath returns the .app bundle path for a GUI app.
         let p = Provenance(pid: 1, path: "/Applications/Foo.app", trust: .developerID,

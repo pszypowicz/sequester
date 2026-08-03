@@ -5,17 +5,22 @@ enum SidebarItem: Hashable {
     case general
     case apps
     case key(String)
+    case profile(String)
 }
 
 struct KeyListView: View {
 
     @Environment(KeyStore.self) private var store
+    @Environment(ProfileStore.self) private var profileStore
     @Environment(\.openWindow) private var openWindow
     @State private var navigator = Navigator.shared
     @State private var selection: SidebarItem? = .general
     @State private var showCreate = false
     @State private var editCandidate: KeyMetadata?
     @State private var deleteCandidate: KeyMetadata?
+    @State private var showCreateProfile = false
+    @State private var editProfileCandidate: ProfileMetadata?
+    @State private var deleteProfileCandidate: ProfileMetadata?
 
     /// Titlebar text that names the section the user is in, so the window
     /// tells you where you are the same way the sidebar does.
@@ -25,6 +30,8 @@ struct KeyListView: View {
             return "Apps"
         case .key(let name):
             return "Keys - \(name)"
+        case .profile(let name):
+            return "Profiles - \(name)"
         case .general, .none:
             return "Settings"
         }
@@ -67,18 +74,49 @@ struct KeyListView: View {
                         }
                     }
                 }
+
+                Section("Secrets Profiles") {
+                    if profileStore.profiles.isEmpty {
+                        Text("No profiles yet")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(profileStore.profiles) { profile in
+                        Label(profile.name, systemImage: profileIcon(profile))
+                            .padding(.vertical, 2)
+                            .tag(SidebarItem.profile(profile.name))
+                            .contextMenu {
+                                Button("Rename…") {
+                                    editProfileCandidate = profile
+                                }
+                                Divider()
+                                Button("Delete \"\(profile.name)\"…", role: .destructive) {
+                                    deleteProfileCandidate = profile
+                                }
+                            }
+                    }
+                }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 360)
             .safeAreaInset(edge: .bottom) {
-                Button {
-                    showCreate = true
-                } label: {
-                    Label("New Key", systemImage: "plus")
-                        .frame(maxWidth: .infinity)
+                VStack(spacing: 8) {
+                    Button {
+                        showCreate = true
+                    } label: {
+                        Label("New Key", systemImage: "plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .keyboardShortcut("n", modifiers: .command)
+                    Button {
+                        showCreateProfile = true
+                    } label: {
+                        Label("New Profile", systemImage: "plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .keyboardShortcut("n", modifiers: .command)
                 .disabled(!store.enclaveAvailable)
                 .padding(12)
             }
@@ -88,6 +126,13 @@ struct KeyListView: View {
                 if let key = store.keys.first(where: { $0.name == name }) {
                     KeyDetailView(key: key)
                         .id(key.name)
+                } else {
+                    SetupView()
+                }
+            case .profile(let name):
+                if let profile = profileStore.profiles.first(where: { $0.name == name }) {
+                    ProfileDetailView(profile: profile)
+                        .id(profile.name)
                 } else {
                     SetupView()
                 }
@@ -115,6 +160,23 @@ struct KeyListView: View {
                 }
             }
         }
+        .sheet(isPresented: $showCreateProfile) {
+            CreateProfileSheet()
+        }
+        .sheet(item: $editProfileCandidate) { profile in
+            EditProfileSheet(profile: profile) { newName in
+                if selection == .profile(profile.name) {
+                    selection = .profile(newName)
+                }
+            }
+        }
+        .sheet(item: $deleteProfileCandidate) { profile in
+            DeleteProfileSheet(profile: profile) {
+                if selection == .profile(profile.name) {
+                    selection = .general
+                }
+            }
+        }
         // Hand the window-opening action to the navigator so a notification
         // click can reopen this window, and honor a jump requested while the
         // window was closed (applied here) or already open (onChange).
@@ -131,5 +193,13 @@ struct KeyListView: View {
         guard let pending = navigator.pendingSelection else { return }
         selection = pending
         navigator.pendingSelection = nil
+    }
+
+    private func profileIcon(_ profile: ProfileMetadata) -> String {
+        switch profile.tier {
+        case .everyRead: "touchid"
+        case .confirmEveryRead: "lock.shield"
+        case .noPrompt: "lock.open"
+        }
     }
 }
