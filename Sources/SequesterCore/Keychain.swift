@@ -112,11 +112,24 @@ public enum KeyStorage {
             throw KeychainError.status(status)
         }
         let decoder = JSONDecoder()
-        return items.compactMap { item -> KeyMetadata? in
-            guard let generic = item[kSecAttrGeneric] as? Data else { return nil }
-            return try? decoder.decode(KeyMetadata.self, from: generic)
+        var undecodable = 0
+        let keys = items.compactMap { item -> KeyMetadata? in
+            guard let generic = item[kSecAttrGeneric] as? Data else { undecodable += 1; return nil }
+            do {
+                return try decoder.decode(KeyMetadata.self, from: generic)
+            } catch {
+                // A key that cannot be decoded is still a key: say so
+                // loudly rather than letting it disappear from the
+                // inventory without a trace.
+                undecodable += 1
+                Log.store.error("A stored key could not be decoded: \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
         }
-        .sorted { $0.createdAt < $1.createdAt }
+        if undecodable > 0 {
+            throw KeychainError.corruptItem
+        }
+        return keys.sorted { $0.createdAt < $1.createdAt }
     }
 
     public static func load(name: String) throws -> (dataRepresentation: Data, metadata: KeyMetadata) {

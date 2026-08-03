@@ -360,7 +360,13 @@ public enum EnclaveKeyStore {
     /// directory is app-managed, so stray .pub files are treated as stale,
     /// never as user data.
     public static func syncPublicKeyFiles() {
-        let keys = list()
+        // Pruning is driven by the inventory, so it must not run against a
+        // partial one: a listing that failed would otherwise make every
+        // public key file look stale and delete it.
+        guard let keys = try? KeyStorage.list() else {
+            Log.store.error("Skipping public key file sync: the key inventory could not be read")
+            return
+        }
         for key in keys {
             let line = key.publicKeyLine + "\n"
             let existing = try? String(contentsOf: key.publicKeyFileURL, encoding: .utf8)

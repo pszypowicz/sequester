@@ -46,6 +46,27 @@ public struct ProfileMetadata: Codable, Hashable, Sendable, Identifiable {
         self.lastRead = lastRead
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case name, tier, variableNames, exportDisabled, rememberSeconds
+        case publicKey, createdAt, updatedAt, lastRead
+    }
+
+    /// Decodes tolerantly, for the same reason keys do: a profile stored by
+    /// a version that predates a setting must keep working rather than
+    /// disappear from the inventory.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        tier = try container.decode(SecretTier.self, forKey: .tier)
+        publicKey = try container.decode(Data.self, forKey: .publicKey)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        variableNames = try container.decodeIfPresent([String].self, forKey: .variableNames) ?? []
+        exportDisabled = try container.decodeIfPresent(Bool.self, forKey: .exportDisabled) ?? false
+        rememberSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .rememberSeconds) ?? 0
+        lastRead = try container.decodeIfPresent(Date.self, forKey: .lastRead)
+    }
+
     public var summary: ProfileSummary {
         ProfileSummary(name: name, tier: tier, variables: variableNames,
                        exportDisabled: exportDisabled, createdAt: createdAt,
