@@ -43,11 +43,9 @@ public enum SecretsPolicy {
 /// In-memory, per-profile grace windows: after confirming a read the user
 /// can waive the next few minutes of confirmations for that profile.
 ///
-/// This replaces the earlier "allow this app for the session" grant, which
-/// promised something the app cannot verify. A window is scoped to time
-/// alone, so nothing about it can be forged; the honest caveat is that
-/// anything running during the window rides along. Nothing is persisted, so
-/// windows evaporate when the app restarts.
+/// A window is scoped to time alone, so nothing about it can be forged.
+/// The caveat is that anything running during the window rides along.
+/// Nothing is persisted, so windows evaporate when the app restarts.
 public final class SecretsGraceWindows: @unchecked Sendable {
 
     public static let shared = SecretsGraceWindows()
