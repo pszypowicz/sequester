@@ -35,6 +35,11 @@ cd "$(cd "$(dirname "$0")/.." && pwd)"
 VERSION=$(head -1 VERSION 2>/dev/null | tr -d '[:space:]')
 [ -n "$VERSION" ] || { echo "error: VERSION file missing or empty" >&2; exit 1; }
 
+# A VERSION-only bump changes no compiler input, so the build system would
+# skip the metadata plugin's prebuild command and reuse binaries reporting
+# the previous version and git hash. Dropping the plugin outputs forces the
+# metadata to regenerate and the consuming targets to recompile.
+rm -rf .build/plugins/outputs
 swift build -c release
 
 APP=".build/Sequester.app/Contents"
