@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Observation
 import SequesterCore
 import SecretsWire
@@ -14,21 +15,32 @@ final class ProfileStore {
 
     var enclaveAvailable: Bool { EnclaveProfileStore.isEnclaveAvailable }
 
-    @ObservationIgnored nonisolated(unsafe) private var observer: (any NSObjectProtocol)?
+    @ObservationIgnored nonisolated(unsafe) private var observers: [any NSObjectProtocol] = []
 
     init() {
         reload()
         // Reload live when the broker records a read or a CLI-driven change
         // on a background thread, so an open profile page updates in place.
-        observer = NotificationCenter.default.addObserver(
-            forName: .sequesterProfilesDidChange, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload() }
-        }
+        observers = [
+            NotificationCenter.default.addObserver(
+                forName: .sequesterProfilesDidChange, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reload() }
+            },
+            // The change notification is in-process, so a second
+            // instance run from a terminal can edit the keychain
+            // without this one hearing it. Refresh whenever the app
+            // comes forward, which is when a stale list would show.
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reload() }
+            },
+        ]
     }
 
     deinit {
-        if let observer {
+        for observer in observers {
             NotificationCenter.default.removeObserver(observer)
         }
     }
