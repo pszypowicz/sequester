@@ -140,35 +140,6 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         self.createdAt = createdAt
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case name, keyDescription, authRequired, blockForwarded, approveAll, autoApprove
-        case locked, destinations, branchRules, appRules, rememberSeconds, comment
-        case publicKey, createdAt
-    }
-
-    /// Decodes tolerantly: a key stored by a version that predates a
-    /// setting must keep working, so anything absent falls back to the
-    /// value a key is created with. Only the identity of the key is
-    /// required. Without this, adding a setting would make every existing
-    /// key fail to decode and vanish from the inventory.
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        name = try container.decode(String.self, forKey: .name)
-        publicKey = try container.decode(Data.self, forKey: .publicKey)
-        createdAt = try container.decode(Date.self, forKey: .createdAt)
-        authRequired = try container.decodeIfPresent(Bool.self, forKey: .authRequired) ?? true
-        keyDescription = try container.decodeIfPresent(String.self, forKey: .keyDescription) ?? ""
-        blockForwarded = try container.decodeIfPresent(Bool.self, forKey: .blockForwarded) ?? false
-        approveAll = try container.decodeIfPresent(Bool.self, forKey: .approveAll) ?? false
-        autoApprove = try container.decodeIfPresent(Bool.self, forKey: .autoApprove) ?? false
-        locked = try container.decodeIfPresent(Bool.self, forKey: .locked) ?? false
-        destinations = try container.decodeIfPresent([DestinationRecord].self, forKey: .destinations) ?? []
-        branchRules = try container.decodeIfPresent([BranchRule].self, forKey: .branchRules) ?? []
-        appRules = try container.decodeIfPresent([AppRule].self, forKey: .appRules) ?? []
-        rememberSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .rememberSeconds) ?? 0
-        comment = try container.decodeIfPresent(String.self, forKey: .comment)
-    }
-
     public var publicKeyBlob: Data {
         OpenSSH.p256PublicKeyBlob(x963: publicKey)
     }

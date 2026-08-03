@@ -373,9 +373,8 @@ public enum EnclaveKeyStore {
             if existing != line {
                 try? writePublicKeyFile(key)
             } else {
-                // Content is current, but a file an older version wrote is
-                // group- and world-readable; re-tighten it so ssh keeps
-                // accepting it as an IdentityFile after an upgrade.
+                // Content is current, so only the mode needs asserting:
+                // ssh refuses a group- or world-readable IdentityFile.
                 try? FileManager.default.setAttributes(
                     [.posixPermissions: 0o600], ofItemAtPath: key.publicKeyFileURL.path)
             }
