@@ -70,6 +70,8 @@ Each profile chooses a Touch ID tier at creation, and the choice is permanent:
 
 Only the first tier is enforced by the hardware. The other two are app-level gates in front of a key the app could use without them, backed by verified caller identity, a signature-scoped policy store, and a notification on every read.
 
+With the lid closed, every Touch ID prompt routes to a paired Apple Watch instead (a double press of the side button approves), for key signatures and profile reads alike. This needs "Use your Apple Watch to unlock your applications and your Mac" enabled in System Settings, and without it the prompts fall back to a password.
+
 The caller a profile authorizes is the terminal or IDE the command runs from, resolved through macOS process responsibility and verified by code signature, because the socket peer is always the bundled CLI itself. Standings work like keys: neutral asks, approved reads silently, blocked denies without a prompt, with per-profile overrides on the profile's page. Creating, updating, or deleting a profile always shows a confirmation dialog in the app, and every read posts a notification.
 
 The `sequester` CLI ships inside the app bundle. Put it on PATH once:
