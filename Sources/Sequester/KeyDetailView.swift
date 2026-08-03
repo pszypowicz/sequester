@@ -26,6 +26,12 @@ struct KeyDetailView: View {
 
             Section("Approval") {
                 LabeledContent("Security", value: key.authRequired ? "Touch ID on every signature" : "Touch ID not required")
+                if key.authRequired {
+                    RememberWindow.picker(
+                        selection: rememberBinding,
+                        info: "After a Touch ID tap, later signatures for that exact destination skip the prompt until the window runs out. A window covers only the path it was granted for, never a request that arrived through a forwarding hop, and locking the screen closes it. Off means every signature prompts."
+                    )
+                }
                 if !key.authRequired {
                     Toggle(isOn: approveAllBinding) {
                         settingLabel("Approve all requests without asking",
@@ -193,6 +199,20 @@ struct KeyDetailView: View {
             onName: { namingTarget = NamingTarget(id: $0) }
         )
         .listRowBackground(rowTint(for: row))
+    }
+
+    private var rememberBinding: Binding<TimeInterval> {
+        Binding(
+            get: { key.rememberSeconds },
+            set: { seconds in
+                do {
+                    try store.setRememberSeconds(name: key.name, seconds: seconds)
+                    errorMessage = nil
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        )
     }
 
     private var lockedBinding: Binding<Bool> {

@@ -108,24 +108,45 @@ public enum EnclaveProfileStore {
     /// Decrypts a profile's values. On an everyRead profile the Enclave
     /// demands user presence here, showing `reason` in its prompt.
     ///
-    /// The LAContext must be a fresh one per read. A context that has once
-    /// satisfied the key's access control keeps that authorization for
-    /// every later operation passed the same instance, with no expiry of
-    /// its own, so caching it would turn "Touch ID on every read" into an
-    /// unbounded grace window.
-    public static func readValues(name: String, reason: String) throws -> [String: String] {
+    /// Unless the profile has a remembered-tap window open, the LAContext
+    /// must be a fresh one per read. A context that has once satisfied the
+    /// key's access control keeps that authorization for every later
+    /// operation passed the same instance, with no expiry of its own, so
+    /// reusing one outside a window would turn "Touch ID on every read"
+    /// into an unbounded waiver.
+    public static func readValues(name: String, reason: String) throws -> (values: [String: String], reusedAuthorization: Bool) {
         let stored = try ProfileStorage.load(name: name)
-        let context = LAContext()
-        context.localizedReason = reason
+        let scope = stored.metadata.rememberSeconds > 0 && stored.metadata.tier == .everyRead
+            ? AuthorizationScope.profile(name) : nil
+        // A held authorization outlives a screen lock, so never reuse one
+        // while the screen reports itself locked.
+        let held = scope.flatMap { AuthorizationWindows.shared.existing(scope: $0) }
+        let reused = held != nil && !AuthorizationWindows.screenIsLocked()
+
+        let context = reused ? held! : LAContext()
+        if !reused { context.localizedReason = reason }
         let key = try SecureEnclave.P256.KeyAgreement.PrivateKey(
             dataRepresentation: stored.value.keyData,
             authenticationContext: context
         )
         let plaintext = try ProfileCipher.open(stored.value.sealed, with: key)
         let values = try ProfileCipher.decodeValues(plaintext)
+        if let scope {
+            AuthorizationWindows.shared.remember(scope: scope, context: context,
+                                                 seconds: stored.metadata.rememberSeconds)
+        }
         _ = try? ProfileStorage.mutate(name: name) { $0.lastRead = Date(); return true }
-        Log.secrets.debug("Decrypted profile \(name, privacy: .public), tier \(stored.metadata.tier.rawValue, privacy: .public)")
-        return values
+        Log.secrets.debug("Decrypted profile \(name, privacy: .public), tier \(stored.metadata.tier.rawValue, privacy: .public), reused \(reused, privacy: .public)")
+        return (values, reused)
+    }
+
+    @discardableResult
+    public static func setRememberSeconds(name: String, seconds: TimeInterval) throws -> ProfileMetadata {
+        let metadata = try ProfileStorage.mutate(name: name) { $0.rememberSeconds = seconds; return true }
+        AuthorizationWindows.shared.invalidate(prefix: AuthorizationScope.profilePrefix(name))
+        SecretsGraceWindows.shared.revoke(profile: name)
+        Log.secrets.log("Set rememberSeconds of \(name, privacy: .public) to \(seconds, privacy: .public)")
+        return metadata
     }
 
     /// Decrypts, merges, and re-seals: entries in `setting` overwrite, names
@@ -143,6 +164,7 @@ public enum EnclaveProfileStore {
             authenticationContext: context
         )
         var values = try ProfileCipher.decodeValues(try ProfileCipher.open(stored.value.sealed, with: key))
+        AuthorizationWindows.shared.invalidate(prefix: AuthorizationScope.profilePrefix(name))
         for (variable, value) in setting { values[variable] = value }
         for variable in removing { values.removeValue(forKey: variable) }
 
@@ -173,6 +195,7 @@ public enum EnclaveProfileStore {
     @discardableResult
     public static func setExportDisabled(name: String, disabled: Bool) throws -> ProfileMetadata {
         let metadata = try ProfileStorage.mutate(name: name) { $0.exportDisabled = disabled; return true }
+        AuthorizationWindows.shared.invalidate(prefix: AuthorizationScope.profilePrefix(name))
         SecretsGraceWindows.shared.revoke(profile: name)
         Log.secrets.log("Set exportDisabled of profile \(name, privacy: .public) to \(disabled, privacy: .public)")
         return metadata
@@ -182,6 +205,7 @@ public enum EnclaveProfileStore {
     /// key handle and the ciphertext, so the values are unrecoverable.
     public static func delete(name: String) throws {
         try ProfileStorage.delete(name: name)
+        AuthorizationWindows.shared.invalidate(prefix: AuthorizationScope.profilePrefix(name))
         SecretsGraceWindows.shared.revoke(profile: name)
         Log.secrets.log("Deleted profile \(name, privacy: .public)")
     }

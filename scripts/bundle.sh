@@ -35,12 +35,23 @@ cd "$(cd "$(dirname "$0")/.." && pwd)"
 VERSION=$(head -1 VERSION 2>/dev/null | tr -d '[:space:]')
 [ -n "$VERSION" ] || { echo "error: VERSION file missing or empty" >&2; exit 1; }
 
-# A VERSION-only bump changes no compiler input, so the build system would
-# skip the metadata plugin's prebuild command and reuse binaries reporting
-# the previous version and git hash. Dropping the plugin outputs forces the
-# metadata to regenerate and the consuming targets to recompile.
-rm -rf .build/plugins/outputs
+# A VERSION-only bump changes no compiler input, so the build system can
+# skip the metadata plugin and reuse binaries reporting the previous
+# version. Deleting just the generated files forces them to be rewritten
+# and their targets recompiled; removing the directory itself would
+# invalidate the build plan and fail the build.
+find .build/plugins/outputs -name 'BuildMetadata.generated.swift' -delete 2>/dev/null || true
 swift build -c release
+
+# Guard the outcome: the binaries must report the version being stamped
+# into the plist, so a stale build is a hard error rather than a release
+# that lies about itself.
+built_version=$(.build/release/sequester-cli --version | awk '{print $1}')
+if [[ "$built_version" != "$VERSION" ]]; then
+  echo "error: built binary reports $built_version but VERSION says $VERSION" >&2
+  echo "Run 'swift package clean' and try again." >&2
+  exit 1
+fi
 
 APP=".build/Sequester.app/Contents"
 rm -rf ".build/Sequester.app"

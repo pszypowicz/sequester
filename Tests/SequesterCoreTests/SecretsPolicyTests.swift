@@ -34,22 +34,28 @@ import SecretsWire
 
     @Test func grantIsScopedToOneProfile() {
         let windows = SecretsGraceWindows()
-        windows.grant(profile: "a", now: epoch)
+        windows.grant(profile: "a", seconds: 300, now: epoch)
         #expect(windows.isActive(profile: "a", now: epoch))
         #expect(!windows.isActive(profile: "b", now: epoch))
     }
 
     @Test func windowExpires() {
         let windows = SecretsGraceWindows()
-        windows.grant(profile: "a", now: epoch)
-        #expect(windows.isActive(profile: "a", now: epoch.addingTimeInterval(SecretsGraceWindows.duration - 1)))
-        #expect(!windows.isActive(profile: "a", now: epoch.addingTimeInterval(SecretsGraceWindows.duration)))
+        windows.grant(profile: "a", seconds: 300, now: epoch)
+        #expect(windows.isActive(profile: "a", now: epoch.addingTimeInterval(299)))
+        #expect(!windows.isActive(profile: "a", now: epoch.addingTimeInterval(300)))
     }
 
     @Test func revokeClosesTheWindow() {
         let windows = SecretsGraceWindows()
-        windows.grant(profile: "a", now: epoch)
+        windows.grant(profile: "a", seconds: 300, now: epoch)
         windows.revoke(profile: "a")
+        #expect(!windows.isActive(profile: "a", now: epoch))
+    }
+
+    @Test func zeroSecondsGrantsNothing() {
+        let windows = SecretsGraceWindows()
+        windows.grant(profile: "a", seconds: 0, now: epoch)
         #expect(!windows.isActive(profile: "a", now: epoch))
     }
 

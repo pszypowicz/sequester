@@ -65,17 +65,20 @@ public struct SecretsApprovalRequest: Sendable {
     /// Best-effort attribution of the request, for context only.
     public let requester: String
     /// Whether the dialog offers a grace window, which only a read of a
-    /// confirm-every-read profile can use.
+    /// confirm-every-read profile with one configured can use.
     public let offersGrace: Bool
+    /// How long that window would last.
+    public let graceSeconds: TimeInterval
 
     public init(profileName: String, kind: Kind, variableNames: [String], tier: SecretTier,
-                requester: String, offersGrace: Bool) {
+                requester: String, offersGrace: Bool, graceSeconds: TimeInterval = 0) {
         self.profileName = profileName
         self.kind = kind
         self.variableNames = variableNames
         self.tier = tier
         self.requester = requester
         self.offersGrace = offersGrace
+        self.graceSeconds = graceSeconds
     }
 }
 
@@ -108,7 +111,8 @@ public enum ProfileChange: String, Sendable {
 /// use visible when no prompt was shown. `silent` is true when values were
 /// handed out with no user interaction at all.
 public protocol SecretsNotifier: Sendable {
-    func read(profile: String, tier: SecretTier, requester: String, silent: Bool)
+    func read(profile: String, tier: SecretTier, requester: String,
+              silent: Bool, reusedAuthorization: Bool)
     func changed(profile: String, change: ProfileChange, requester: String)
 }
 
@@ -180,22 +184,25 @@ public struct SecretsBroker: Sendable {
         var confirmed = false
         if outcome == .dialogAsk {
             let decision = await approve(kind: .read, metadata: metadata, session: session,
-                                         offersGrace: metadata.tier == .confirmEveryRead)
+                                         offersGrace: metadata.tier == .confirmEveryRead
+                                                      && metadata.rememberSeconds > 0)
             guard decision.allowed else {
                 return .failure(.denied, "Refused.")
             }
             if decision.grantGrace {
-                SecretsGraceWindows.shared.grant(profile: name)
+                SecretsGraceWindows.shared.grant(profile: name, seconds: metadata.rememberSeconds)
             }
             confirmed = true
         }
 
         do {
-            let values = try EnclaveProfileStore.readValues(name: name, reason: readReason(metadata: metadata, session: session))
-            let silent = !confirmed && metadata.tier != .everyRead
+            let read = try EnclaveProfileStore.readValues(
+                name: name, reason: readReason(metadata: metadata, session: session))
+            let silent = !confirmed && (metadata.tier != .everyRead || read.reusedAuthorization)
             notifier?.read(profile: name, tier: metadata.tier,
-                           requester: session.requesterLabel, silent: silent)
-            return SecretsResponse(ok: true, values: values, exportDisabled: metadata.exportDisabled)
+                           requester: session.requesterLabel, silent: silent,
+                           reusedAuthorization: read.reusedAuthorization)
+            return SecretsResponse(ok: true, values: read.values, exportDisabled: metadata.exportDisabled)
         } catch {
             return decryptFailure(error, profile: name)
         }
@@ -281,7 +288,8 @@ public struct SecretsBroker: Sendable {
             variableNames: metadata.variableNames,
             tier: metadata.tier,
             requester: session.requesterLabel,
-            offersGrace: offersGrace
+            offersGrace: offersGrace,
+            graceSeconds: metadata.rememberSeconds
         ))
         Log.secrets.log("Dialog for profile \(metadata.name, privacy: .public): allowed \(decision.allowed, privacy: .public), grace \(decision.grantGrace, privacy: .public)")
         return decision

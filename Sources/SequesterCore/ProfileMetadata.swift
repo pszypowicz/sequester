@@ -18,6 +18,11 @@ public struct ProfileMetadata: Codable, Hashable, Sendable, Identifiable {
     /// Accident prevention, not a security boundary: the purpose is
     /// client-declared.
     public var exportDisabled: Bool
+    /// How long a confirmation is remembered for this profile, in seconds.
+    /// Zero, the default, means every read confirms. On the Touch ID tier
+    /// this holds the authenticated context; on the confirm tier it waives
+    /// the dialog.
+    public var rememberSeconds: TimeInterval
     /// The recipient public key (x9.63 uncompressed point), cached at
     /// creation so sealing new values never loads the Enclave key handle.
     public let publicKey: Data
@@ -28,12 +33,13 @@ public struct ProfileMetadata: Codable, Hashable, Sendable, Identifiable {
     public var id: String { name }
 
     public init(name: String, tier: SecretTier, variableNames: [String],
-                exportDisabled: Bool = false, publicKey: Data,
-                createdAt: Date, updatedAt: Date, lastRead: Date? = nil) {
+                exportDisabled: Bool = false, rememberSeconds: TimeInterval = 0,
+                publicKey: Data, createdAt: Date, updatedAt: Date, lastRead: Date? = nil) {
         self.name = name
         self.tier = tier
         self.variableNames = variableNames
         self.exportDisabled = exportDisabled
+        self.rememberSeconds = rememberSeconds
         self.publicKey = publicKey
         self.createdAt = createdAt
         self.updatedAt = updatedAt

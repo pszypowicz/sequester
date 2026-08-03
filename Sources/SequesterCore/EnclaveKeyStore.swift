@@ -290,6 +290,7 @@ public enum EnclaveKeyStore {
     public static func delete(name: String) throws {
         let metadata = try KeyStorage.load(name: name).metadata
         try KeyStorage.delete(name: name)
+        AuthorizationWindows.shared.invalidate(prefix: AuthorizationScope.keyPrefix(name))
         try? FileManager.default.removeItem(at: metadata.publicKeyFileURL)
         Log.store.log("Deleted key \(name, privacy: .public)")
     }
@@ -298,20 +299,47 @@ public enum EnclaveKeyStore {
     /// ECDSA signature returned as raw r||s. Keys created with
     /// authRequired trigger the Enclave's own Touch ID prompt here.
     ///
-    /// The LAContext must be a fresh one per signature. A context that has
-    /// once satisfied the key's access control keeps that authorization for
-    /// every later operation passed the same instance, with no expiry of
-    /// its own, so caching it would silently drop the per-signature prompt.
-    public static func sign(name: String, data: Data, reason: String) throws -> Data {
+    /// Unless the key has a remembered-tap window open for this exact
+    /// destination, the LAContext must be a fresh one per signature. A
+    /// context that has once satisfied the key's access control keeps that
+    /// authorization for every later operation passed the same instance,
+    /// with no expiry of its own, so reusing one outside a window would
+    /// silently drop the per-signature prompt.
+    ///
+    /// `windowScope` is nil wherever a window may not be opened, which
+    /// `AuthorizationScope.key` decides.
+    @discardableResult
+    public static func sign(name: String, data: Data, reason: String,
+                            windowScope: String? = nil) throws -> (signature: Data, reusedAuthorization: Bool) {
         let stored = try KeyStorage.load(name: name)
         Log.store.debug("Signing \(data.count, privacy: .public) bytes with \(name, privacy: .public), Touch ID \(stored.metadata.authRequired, privacy: .public)")
-        let context = LAContext()
-        context.localizedReason = reason
+
+        let seconds = stored.metadata.authRequired ? stored.metadata.rememberSeconds : 0
+        let scope = seconds > 0 ? windowScope : nil
+        // A held authorization outlives a screen lock, so never reuse one
+        // while the screen reports itself locked.
+        let held = scope.flatMap { AuthorizationWindows.shared.existing(scope: $0) }
+        let reused = held != nil && !AuthorizationWindows.screenIsLocked()
+
+        let context = reused ? held! : LAContext()
+        if !reused { context.localizedReason = reason }
         let key = try SecureEnclave.P256.Signing.PrivateKey(
             dataRepresentation: stored.dataRepresentation,
             authenticationContext: context
         )
-        return try key.signature(for: data).rawRepresentation
+        let signature = try key.signature(for: data).rawRepresentation
+        if let scope {
+            AuthorizationWindows.shared.remember(scope: scope, context: context, seconds: seconds)
+        }
+        return (signature, reused)
+    }
+
+    @discardableResult
+    public static func setRememberSeconds(name: String, seconds: TimeInterval) throws -> KeyMetadata {
+        let metadata = try KeyStorage.mutate(name: name) { $0.rememberSeconds = seconds; return true }
+        AuthorizationWindows.shared.invalidate(prefix: AuthorizationScope.keyPrefix(name))
+        Log.store.log("Set rememberSeconds of \(name, privacy: .public) to \(seconds, privacy: .public)")
+        return metadata
     }
 
     public static func writePublicKeyFile(_ metadata: KeyMetadata) throws {
@@ -332,16 +360,21 @@ public enum EnclaveKeyStore {
     /// directory is app-managed, so stray .pub files are treated as stale,
     /// never as user data.
     public static func syncPublicKeyFiles() {
-        let keys = list()
+        // Pruning is driven by the inventory, so it must not run against a
+        // partial one: a listing that failed would otherwise make every
+        // public key file look stale and delete it.
+        guard let keys = try? KeyStorage.list() else {
+            Log.store.error("Skipping public key file sync: the key inventory could not be read")
+            return
+        }
         for key in keys {
             let line = key.publicKeyLine + "\n"
             let existing = try? String(contentsOf: key.publicKeyFileURL, encoding: .utf8)
             if existing != line {
                 try? writePublicKeyFile(key)
             } else {
-                // Content is current, but a file an older version wrote is
-                // group- and world-readable; re-tighten it so ssh keeps
-                // accepting it as an IdentityFile after an upgrade.
+                // Content is current, so only the mode needs asserting:
+                // ssh refuses a group- or world-readable IdentityFile.
                 try? FileManager.default.setAttributes(
                     [.posixPermissions: 0o600], ofItemAtPath: key.publicKeyFileURL.path)
             }

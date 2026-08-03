@@ -92,7 +92,8 @@ public protocol SigningApprover: Sendable {
 /// at all (no dialog and no Touch ID prompt), which is the case worth
 /// noticing.
 public protocol SigningNotifier: Sendable {
-    func signed(keyName: String, authRequired: Bool, bindingChain: [BindingHop], silent: Bool)
+    func signed(keyName: String, authRequired: Bool, bindingChain: [BindingHop],
+                silent: Bool, reusedAuthorization: Bool)
     /// A request refused by policy before any prompt, so the user learns why
     /// a signature the terminal only reports as "agent refused operation" was
     /// turned down.
@@ -236,15 +237,18 @@ public struct Agent: Sendable {
         }
 
         do {
-            let raw = try EnclaveKeyStore.sign(
+            let signed = try EnclaveKeyStore.sign(
                 name: key.name,
                 data: dataToSign,
-                reason: signReason(key: key, session: session, bindingChain: bindingChain)
+                reason: signReason(key: key, session: session, bindingChain: bindingChain),
+                windowScope: AuthorizationScope.key(key.name, bindingChain: bindingChain)
             )
+            let raw = signed.signature
             Log.agent.log("Signed with \(key.name, privacy: .public) for \(session.provenance.displayName, privacy: .public)")
-            let silent = decision == .allow && !key.authRequired
+            let silent = decision == .allow && (!key.authRequired || signed.reusedAuthorization)
             notifier?.signed(keyName: key.name, authRequired: key.authRequired,
-                             bindingChain: bindingChain, silent: silent)
+                             bindingChain: bindingChain, silent: silent,
+                             reusedAuthorization: signed.reusedAuthorization)
             var payload = Data([Response.signResponse])
             payload.append(SSHWire.lengthPrefixed(OpenSSH.p256SignatureBlob(rawSignature: raw)))
             return payload

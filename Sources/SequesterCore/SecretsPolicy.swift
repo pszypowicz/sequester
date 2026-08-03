@@ -50,18 +50,15 @@ public final class SecretsGraceWindows: @unchecked Sendable {
 
     public static let shared = SecretsGraceWindows()
 
-    /// Long enough to cover a burst of commands, short enough that a
-    /// forgotten window closes on its own.
-    public static let duration: TimeInterval = 300
-
     private let lock = NSLock()
     private var expiries: [String: Date] = [:]
 
     public init() {}
 
-    public func grant(profile: String, now: Date = Date()) {
+    public func grant(profile: String, seconds: TimeInterval, now: Date = Date()) {
+        guard seconds > 0 else { return }
         lock.lock(); defer { lock.unlock() }
-        expiries[profile] = now.addingTimeInterval(Self.duration)
+        expiries[profile] = now.addingTimeInterval(seconds)
     }
 
     public func isActive(profile: String, now: Date = Date()) -> Bool {

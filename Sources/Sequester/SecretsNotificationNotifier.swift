@@ -11,9 +11,11 @@ import SecretsWire
 /// cannot render in notification text.
 struct SecretsNotificationNotifier: SecretsNotifier {
 
-    func read(profile: String, tier: SecretTier, requester: String, silent: Bool) {
+    func read(profile: String, tier: SecretTier, requester: String,
+              silent: Bool, reusedAuthorization: Bool) {
         let content = UNMutableNotificationContent()
-        content.title = silent ? "Secrets read without a prompt" : "Secrets read"
+        content.title = reusedAuthorization ? "Secrets read with a remembered tap"
+            : (silent ? "Secrets read without a prompt" : "Secrets read")
         content.subtitle = profileLine(profile, tier: tier)
         content.body = "\u{1F5A5}\u{FE0F} \(requester)"
         content.userInfo = ["profileName": profile]

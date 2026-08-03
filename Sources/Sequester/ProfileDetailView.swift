@@ -32,6 +32,11 @@ struct ProfileDetailView: View {
             }
 
             Section("Access") {
+                RememberWindow.picker(
+                    selection: rememberBinding,
+                    info: "After you confirm a read, later reads of this profile skip the confirmation until the window runs out. Locking the screen closes it, as does changing the profile. Off means every read confirms."
+                )
+                .disabled(profile.tier == .noPrompt)
                 Toggle(isOn: exportDisabledBinding) {
                     settingLabel("Disable env export",
                                  "Refuses reads made for env export, so values never land on stdout where a transcript or an AI agent's context would capture them. env exec still works. This guards against accidents; a caller controls what it declares.")
@@ -101,6 +106,20 @@ struct ProfileDetailView: View {
             Text(title)
             InfoDot(text: info)
         }
+    }
+
+    private var rememberBinding: Binding<TimeInterval> {
+        Binding(
+            get: { profile.rememberSeconds },
+            set: { seconds in
+                do {
+                    try store.setRememberSeconds(name: profile.name, seconds: seconds)
+                    errorMessage = nil
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        )
     }
 
     private var exportDisabledBinding: Binding<Bool> {

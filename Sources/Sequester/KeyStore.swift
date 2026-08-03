@@ -83,6 +83,11 @@ final class KeyStore {
         reload()
     }
 
+    func setRememberSeconds(name: String, seconds: TimeInterval) throws {
+        try EnclaveKeyStore.setRememberSeconds(name: name, seconds: seconds)
+        reload()
+    }
+
     func setLocked(name: String, locked: Bool) throws {
         try EnclaveKeyStore.setLocked(name: name, locked: locked)
         reload()

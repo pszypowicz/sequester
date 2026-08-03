@@ -56,7 +56,7 @@ public enum Selftest {
         }
         check("sign and verify") {
             let message = Data("sequester selftest".utf8)
-            let raw = try EnclaveKeyStore.sign(name: temporaryKeyName, data: message, reason: "selftest")
+            let raw = try EnclaveKeyStore.sign(name: temporaryKeyName, data: message, reason: "selftest").signature
             let stored = try KeyStorage.load(name: temporaryKeyName).metadata
             let publicKey = try P256.Signing.PublicKey(x963Representation: stored.publicKey)
             let signature = try P256.Signing.ECDSASignature(rawRepresentation: raw)
@@ -141,13 +141,13 @@ public enum Selftest {
             }
         }
         check("profile read round trip") {
-            let values = try EnclaveProfileStore.readValues(name: temporaryProfileName, reason: "selftest")
+            let values = try EnclaveProfileStore.readValues(name: temporaryProfileName, reason: "selftest").values
             guard values == ["SEQ_TEST_A": "alpha"] else { throw KeychainError.corruptItem }
         }
         check("profile value merge") {
             try EnclaveProfileStore.updateValues(name: temporaryProfileName,
                                                  setting: ["SEQ_TEST_B": "beta"], reason: "selftest")
-            let values = try EnclaveProfileStore.readValues(name: temporaryProfileName, reason: "selftest")
+            let values = try EnclaveProfileStore.readValues(name: temporaryProfileName, reason: "selftest").values
             guard values == ["SEQ_TEST_A": "alpha", "SEQ_TEST_B": "beta"] else {
                 throw KeychainError.corruptItem
             }

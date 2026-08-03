@@ -15,6 +15,7 @@ struct SecretsApprovalView: View {
     /// Whether the grace checkbox is offered; only a read of a
     /// confirm-every-read profile can use one.
     let offersGrace: Bool
+    let graceSeconds: TimeInterval
     let complete: (SecretsApprovalDecision) -> Void
 
     @State private var grantGrace = false
@@ -38,7 +39,7 @@ struct SecretsApprovalView: View {
     }
 
     private var graceTitle: String {
-        "Don't ask again for \(Int(SecretsGraceWindows.duration / 60)) minutes"
+        "Don't ask again for \(RememberWindow.label(seconds: graceSeconds))"
     }
 
     var body: some View {

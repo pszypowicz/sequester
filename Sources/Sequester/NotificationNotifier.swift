@@ -11,9 +11,11 @@ import SequesterCore
 /// emoji standing in for the app's touchid/key/mappin icons.
 struct NotificationNotifier: SigningNotifier {
 
-    func signed(keyName: String, authRequired: Bool, bindingChain: [BindingHop], silent: Bool) {
+    func signed(keyName: String, authRequired: Bool, bindingChain: [BindingHop],
+                silent: Bool, reusedAuthorization: Bool) {
         let content = UNMutableNotificationContent()
-        content.title = silent ? "Signed without a prompt" : "Signed"
+        content.title = reusedAuthorization ? "Signed with a remembered tap"
+            : (silent ? "Signed without a prompt" : "Signed")
         content.subtitle = keyLine(keyName, authRequired: authRequired)
         content.body = destinationLine(bindingChain) ?? "\u{1F4CD} No destination bound"
         content.userInfo = ["keyName": keyName]
