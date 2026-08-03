@@ -131,7 +131,7 @@ struct KeyDetailView: View {
                         .padding(.vertical, 2)
                     }
                 }
-                let candidates = appAuth.authorizations.filter { auth in
+                let candidates = appAuth.ssh.filter { auth in
                     !key.appRules.contains { $0.identity == auth.identity }
                 }
                 if !candidates.isEmpty {

@@ -274,15 +274,15 @@ public struct Agent: Sendable {
             identityKey: session.provenance.identityKey,
             instance: session.responsibleInstanceID,
             perKeyRules: key.appRules,
-            globalLookup: { AppAuthorizationStore.state(for: $0) },
-            sessionAllowed: { AppSessionGrants.shared.isAllowed(identity: $0, instance: $1) },
+            globalLookup: { AppAuthorizationStore.state(for: $0, domain: .ssh) },
+            sessionAllowed: { AppSessionGrants.shared.isAllowed(identity: $0, instance: $1, domain: .ssh) },
             sessionBlocked: { AppSessionGrants.shared.isBlocked(instance: $0) }
         )
     }
 
     private func applyAppDecision(_ scope: AppScope, session: AgentSession) {
         AppDecisionRecorder.apply(scope, provenance: session.provenance,
-                                  instanceID: session.responsibleInstanceID)
+                                  instanceID: session.responsibleInstanceID, domain: .ssh)
     }
 
     private func signReason(key: KeyMetadata, session: AgentSession, bindingChain: [BindingHop]) -> String {

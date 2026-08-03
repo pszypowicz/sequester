@@ -312,8 +312,8 @@ public struct SecretsBroker: Sendable {
             identityKey: session.responsible.identityKey,
             instance: session.responsibleInstanceID,
             perKeyRules: profile?.appRules ?? [],
-            globalLookup: { AppAuthorizationStore.state(for: $0) },
-            sessionAllowed: { AppSessionGrants.shared.isAllowed(identity: $0, instance: $1) },
+            globalLookup: { AppAuthorizationStore.state(for: $0, domain: .secrets) },
+            sessionAllowed: { AppSessionGrants.shared.isAllowed(identity: $0, instance: $1, domain: .secrets) },
             sessionBlocked: { AppSessionGrants.shared.isBlocked(instance: $0) }
         )
     }
@@ -331,7 +331,7 @@ public struct SecretsBroker: Sendable {
         )
         let decision = await approver.approve(request)
         AppDecisionRecorder.apply(decision.appScope, provenance: session.responsible,
-                                  instanceID: session.responsibleInstanceID)
+                                  instanceID: session.responsibleInstanceID, domain: .secrets)
         Log.secrets.log("Approval dialog for profile \(metadata.name, privacy: .public): allowed \(decision.allowed, privacy: .public), scope \(decision.appScope.rawValue, privacy: .public)")
         return decision.allowed
     }

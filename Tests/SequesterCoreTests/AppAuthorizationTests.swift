@@ -2,6 +2,22 @@ import Testing
 import Foundation
 @testable import SequesterCore
 
+@Suite struct AppSessionGrantsTests {
+
+    @Test func sessionAllowIsDomainScoped() {
+        let grants = AppSessionGrants()
+        grants.allow(identity: "devid:T:app", instance: "100.5", domain: .ssh)
+        #expect(grants.isAllowed(identity: "devid:T:app", instance: "100.5", domain: .ssh))
+        #expect(!grants.isAllowed(identity: "devid:T:app", instance: "100.5", domain: .secrets))
+    }
+
+    @Test func sessionBlockCoversBothDomains() {
+        let grants = AppSessionGrants()
+        grants.block(instance: "100.5")
+        #expect(grants.isBlocked(instance: "100.5"))
+    }
+}
+
 @Suite struct AppPolicyTests {
 
     private let id = "apple:com.apple.ssh"

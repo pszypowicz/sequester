@@ -111,7 +111,7 @@ struct ProfileDetailView: View {
                         .padding(.vertical, 2)
                     }
                 }
-                let candidates = appAuth.authorizations.filter { auth in
+                let candidates = appAuth.secrets.filter { auth in
                     !profile.appRules.contains { $0.identity == auth.identity }
                 }
                 if !candidates.isEmpty {

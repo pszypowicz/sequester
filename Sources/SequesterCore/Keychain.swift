@@ -170,54 +170,65 @@ public enum KeyStorage {
     }
 }
 
-/// Persistence for global app authorizations, in one keychain item so the
-/// list is protected by the same code-signature-scoped access as the keys
-/// themselves: a co-resident process cannot add itself to the allowlist the
-/// way it could edit a plain file in the user-owned container. Stored as a
-/// JSON array in the value of a single generic-password item.
+/// Persistence for global app authorizations, one keychain item per
+/// authorization domain so the lists are protected by the same
+/// code-signature-scoped access as the keys themselves: a co-resident
+/// process cannot add itself to an allowlist the way it could edit a plain
+/// file in the user-owned container. Each domain is a JSON array in the
+/// value of a single generic-password item, and the domains never mix, so
+/// an app allowed for SSH signing stays unknown to secrets profiles.
 public enum AppAuthorizationStore {
 
     static let service = "cz.szypowi.sequester.apps"
-    private static let account = "authorizations"
+
+    /// The ssh account predates the domain split, so existing
+    /// authorizations keep governing exactly what they were granted for.
+    private static func account(for domain: AuthorizationDomain) -> String {
+        switch domain {
+        case .ssh: "authorizations"
+        case .secrets: "authorizations.secrets"
+        }
+    }
 
     private static let mutationLock = NSLock()
 
     private static let cacheLock = NSLock()
-    nonisolated(unsafe) private static var cache: [AppAuthorization]?
+    nonisolated(unsafe) private static var cache: [AuthorizationDomain: [AppAuthorization]] = [:]
 
-    private static func baseQuery() -> [CFString: Any] {
+    private static func baseQuery(domain: AuthorizationDomain) -> [CFString: Any] {
         [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
-            kSecAttrAccount: account,
+            kSecAttrAccount: account(for: domain),
         ]
     }
 
-    /// Cached because it is read on the signing hot path (once per request
+    /// Cached because it is read on the request hot path (once per request
     /// for a verified app with no per-key rule). This store is the only
     /// writer, so setState and remove keep the cache current.
-    public static func list() -> [AppAuthorization] {
+    public static func list(domain: AuthorizationDomain) -> [AppAuthorization] {
         cacheLock.lock()
         defer { cacheLock.unlock() }
-        if let cache {
-            return cache
+        if let cached = cache[domain] {
+            return cached
         }
-        let loaded = load()
-        cache = loaded
+        let loaded = load(domain: domain)
+        cache[domain] = loaded
         return loaded
     }
 
-    public static func state(for identity: String) -> AppState? {
-        list().first { $0.identity == identity }?.state
+    public static func state(for identity: String, domain: AuthorizationDomain) -> AppState? {
+        list(domain: domain).first { $0.identity == identity }?.state
     }
 
-    /// Records or updates an app's global standing and bumps its last-used
-    /// timestamp. Serialized so a signature-thread write and a UI edit cannot
-    /// clobber each other.
-    public static func setState(identity: String, displayName: String, state: AppState, now: Date) {
+    /// Records or updates an app's standing in one domain and bumps its
+    /// last-used timestamp. Serialized so a request-thread write and a UI
+    /// edit cannot clobber each other.
+    public static func setState(identity: String, displayName: String, state: AppState,
+                                domain: AuthorizationDomain, now: Date) {
         mutationLock.lock()
         defer { mutationLock.unlock() }
-        var items = load()
+        var items = load(domain: domain)
         if let index = items.firstIndex(where: { $0.identity == identity }) {
             items[index].state = state
             items[index].displayName = displayName
@@ -227,25 +238,25 @@ public enum AppAuthorizationStore {
                 identity: identity, displayName: displayName, state: state, firstSeen: now, lastUsed: now
             ))
         }
-        save(items)
-        replaceCache(items)
+        save(items, domain: domain)
+        replaceCache(items, domain: domain)
         postChange()
     }
 
-    public static func remove(identity: String) {
+    public static func remove(identity: String, domain: AuthorizationDomain) {
         mutationLock.lock()
         defer { mutationLock.unlock() }
-        var items = load()
+        var items = load(domain: domain)
         let before = items.count
         items.removeAll { $0.identity == identity }
         guard items.count != before else { return }
-        save(items)
-        replaceCache(items)
+        save(items, domain: domain)
+        replaceCache(items, domain: domain)
         postChange()
     }
 
-    private static func load() -> [AppAuthorization] {
-        var query = baseQuery()
+    private static func load(domain: AuthorizationDomain) -> [AppAuthorization] {
+        var query = baseQuery(domain: domain)
         query[kSecMatchLimit] = kSecMatchLimitOne
         query[kSecReturnData] = true
         var result: CFTypeRef?
@@ -254,22 +265,22 @@ public enum AppAuthorizationStore {
         return (try? JSONDecoder().decode([AppAuthorization].self, from: data)) ?? []
     }
 
-    private static func save(_ items: [AppAuthorization]) {
+    private static func save(_ items: [AppAuthorization], domain: AuthorizationDomain) {
         guard let data = try? JSONEncoder().encode(items) else { return }
         let update: [CFString: Any] = [kSecValueData: data]
-        let status = SecItemUpdate(baseQuery() as CFDictionary, update as CFDictionary)
+        let status = SecItemUpdate(baseQuery(domain: domain) as CFDictionary, update as CFDictionary)
         if status == errSecItemNotFound {
-            var attributes = baseQuery()
+            var attributes = baseQuery(domain: domain)
             attributes[kSecValueData] = data
-            attributes[kSecAttrLabel] = "Sequester: app authorizations"
+            attributes[kSecAttrLabel] = "Sequester: app authorizations (\(domain.rawValue))"
             SecItemAdd(attributes as CFDictionary, nil)
         }
     }
 
-    private static func replaceCache(_ items: [AppAuthorization]) {
+    private static func replaceCache(_ items: [AppAuthorization], domain: AuthorizationDomain) {
         cacheLock.lock()
         defer { cacheLock.unlock() }
-        cache = items
+        cache[domain] = items
     }
 
     private static func postChange() {
