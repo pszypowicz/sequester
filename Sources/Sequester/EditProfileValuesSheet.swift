@@ -42,14 +42,16 @@ struct EditProfileValuesSheet: View {
                       error: errorMessage, size: CGSize(width: 480, height: 440),
                       onPrimary: save) {
             Section {
+                VariableColumnHeader()
                 ForEach($existing) { $entry in
                     HStack(spacing: 8) {
                         Text(entry.id)
                             .font(.system(.body, design: .monospaced))
                             .strikethrough(entry.removed)
                             .foregroundStyle(entry.removed ? .secondary : .primary)
-                            .frame(width: 170, alignment: .leading)
-                        SecureField("Leave blank to keep", text: $entry.value)
+                            .frame(width: VariableColumnHeader.nameWidth, alignment: .leading)
+                        SecureField("Value", text: $entry.value, prompt: Text("Leave blank to keep"))
+                            .labelsHidden()
                             .disabled(entry.removed)
                         Button {
                             entry.removed.toggle()
@@ -62,10 +64,12 @@ struct EditProfileValuesSheet: View {
                 }
                 ForEach($added) { $entry in
                     HStack(spacing: 8) {
-                        TextField("NAME", text: $entry.name)
+                        TextField("Name", text: $entry.name, prompt: Text("GITHUB_TOKEN"))
+                            .labelsHidden()
                             .font(.system(.body, design: .monospaced))
-                            .frame(width: 170)
+                            .frame(width: VariableColumnHeader.nameWidth)
                         SecureField("Value", text: $entry.value)
+                            .labelsHidden()
                         Button {
                             added.removeAll { $0.id == entry.id }
                         } label: {

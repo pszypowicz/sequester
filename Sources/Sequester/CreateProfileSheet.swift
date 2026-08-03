@@ -43,12 +43,15 @@ struct CreateProfileSheet: View {
                     .foregroundStyle(.secondary)
             }
             Section {
+                VariableColumnHeader()
                 ForEach($entries) { $entry in
                     HStack(spacing: 8) {
-                        TextField("NAME", text: $entry.name, prompt: Text("e.g. GITHUB_TOKEN"))
+                        TextField("Name", text: $entry.name, prompt: Text("GITHUB_TOKEN"))
+                            .labelsHidden()
                             .font(.system(.body, design: .monospaced))
-                            .frame(width: 170)
+                            .frame(width: VariableColumnHeader.nameWidth)
                         SecureField("Value", text: $entry.value)
+                            .labelsHidden()
                         Button {
                             entries.removeAll { $0.id == entry.id }
                         } label: {
