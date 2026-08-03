@@ -9,8 +9,8 @@ public struct ProfileMetadata: Codable, Hashable, Sendable, Identifiable {
 
     /// Renameable label; also the keychain account and the CLI argument.
     public var name: String
-    /// The Touch ID tier. Fixed at creation: everyRead is baked into the
-    /// Enclave key's access control, the softer tiers are app-enforced.
+    /// How a read is confirmed. Fixed at creation: everyRead is baked into
+    /// the Enclave key's access control, the softer tiers are app-enforced.
     public let tier: SecretTier
     /// Names of the variables in the sealed blob, sorted.
     public var variableNames: [String]
@@ -18,13 +18,6 @@ public struct ProfileMetadata: Codable, Hashable, Sendable, Identifiable {
     /// Accident prevention, not a security boundary: the purpose is
     /// client-declared.
     public var exportDisabled: Bool
-    /// Reads for unknown callers proceed without asking. Blocked callers
-    /// are still denied, and an everyRead profile still prompts in the
-    /// Enclave.
-    public var approveAll: Bool
-    /// Per-profile overrides of an app's standing, taking precedence over
-    /// the global authorization for this profile.
-    public var appRules: [AppRule]
     /// The recipient public key (x9.63 uncompressed point), cached at
     /// creation so sealing new values never loads the Enclave key handle.
     public let publicKey: Data
@@ -35,15 +28,12 @@ public struct ProfileMetadata: Codable, Hashable, Sendable, Identifiable {
     public var id: String { name }
 
     public init(name: String, tier: SecretTier, variableNames: [String],
-                exportDisabled: Bool = false, approveAll: Bool = false,
-                appRules: [AppRule] = [], publicKey: Data,
+                exportDisabled: Bool = false, publicKey: Data,
                 createdAt: Date, updatedAt: Date, lastRead: Date? = nil) {
         self.name = name
         self.tier = tier
         self.variableNames = variableNames
         self.exportDisabled = exportDisabled
-        self.approveAll = approveAll
-        self.appRules = appRules
         self.publicKey = publicKey
         self.createdAt = createdAt
         self.updatedAt = updatedAt

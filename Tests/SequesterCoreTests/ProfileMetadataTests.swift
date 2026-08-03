@@ -8,10 +8,9 @@ import SecretsWire
     private let epoch = Date(timeIntervalSince1970: 0)
 
     private func metadata() -> ProfileMetadata {
-        ProfileMetadata(name: "deploy", tier: .unapprovedOnly,
+        ProfileMetadata(name: "deploy", tier: .confirmEveryRead,
                         variableNames: ["A_TOKEN", "B_TOKEN"],
-                        exportDisabled: true, approveAll: false,
-                        appRules: [AppRule(identity: "devid:T:app", displayName: "app", state: .blocked)],
+                        exportDisabled: true,
                         publicKey: Data(count: 65), createdAt: epoch, updatedAt: epoch)
     }
 
@@ -30,13 +29,13 @@ import SecretsWire
         let data = try JSONSerialization.data(withJSONObject: object)
         let decoded = try JSONDecoder().decode(ProfileMetadata.self, from: data)
         #expect(decoded.name == "deploy")
-        #expect(decoded.tier == .unapprovedOnly)
+        #expect(decoded.tier == .confirmEveryRead)
     }
 
     @Test func summaryCarriesListFields() {
         let summary = metadata().summary
         #expect(summary.name == "deploy")
-        #expect(summary.tier == .unapprovedOnly)
+        #expect(summary.tier == .confirmEveryRead)
         #expect(summary.variables == ["A_TOKEN", "B_TOKEN"])
         #expect(summary.exportDisabled)
     }

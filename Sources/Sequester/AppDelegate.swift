@@ -30,8 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let broker = SecretsBroker(approver: SecretsDialogApprover(),
-                                   notifier: SecretsNotificationNotifier(),
-                                   biometric: LABiometricGate())
+                                   notifier: SecretsNotificationNotifier())
         let secretsServer = MessageServer(socketPath: SequesterPaths.secretsSocketURL.path,
                                           service: SecretsService(broker: broker))
         do {

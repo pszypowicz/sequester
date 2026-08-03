@@ -31,14 +31,14 @@ struct CreateProfileSheet: View {
                 TextField("Name", text: $name, prompt: Text("e.g. deploy"))
             }
             Section {
-                Picker("Security", selection: $tier) {
+                Picker("Confirmation", selection: $tier) {
                     ForEach(SecretTier.allCases, id: \.self) { tier in
                         Text(tier.displayLabel).tag(tier)
                     }
                 }
                 Toggle("Disable env export", isOn: $exportDisabled)
             } footer: {
-                Text("The Touch ID choice is permanent. \u{201C}\(SecretTier.everyRead.displayLabel)\u{201D} is enforced by the Secure Enclave itself; the other tiers are enforced by Sequester in front of a key it could use without them. Disabling export keeps values off stdout, so they reach programs only through env exec.")
+                Text("The confirmation choice is permanent. \u{201C}\(SecretTier.everyRead.displayLabel)\u{201D} is enforced by the Secure Enclave itself; the other choices are enforced by Sequester in front of a key it could use without them. Every read posts a notification whichever you pick. Disabling export keeps values off stdout, so they reach programs only through env exec.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -6,7 +6,7 @@
 
 Speaks the raw framed-JSON protocol of the bundled CLI against the live
 socket served by the running app. Needs two fixed-content test profiles
-created dialog-free beforehand (policy-only tier plus approve-all):
+created dialog-free beforehand (the no-prompt tier):
 
   APP=.build/Sequester.app/Contents/MacOS/Sequester
   "$APP" --selftest-create-profile seq-e2e
@@ -89,7 +89,7 @@ def main() -> None:
         if name not in profiles:
             sys.exit(f"FAIL list: profile {name} not found; create it with --selftest-create-profile")
     entry = profiles[args.profile]
-    if entry["tier"] != "policyOnly" or entry["variables"] != sorted(EXPECTED_VALUES):
+    if entry["tier"] != "noPrompt" or entry["variables"] != sorted(EXPECTED_VALUES):
         sys.exit(f"FAIL list: unexpected test profile entry {entry}")
     if profiles[args.noexport_profile]["exportDisabled"] is not True:
         sys.exit(f"FAIL list: {args.noexport_profile} should be export-disabled")
@@ -98,7 +98,7 @@ def main() -> None:
     reply = roundtrip(sock, {"v": 1, "op": "get", "profile": args.profile, "purpose": "exec"})
     if not reply.get("ok") or reply.get("values") != EXPECTED_VALUES:
         sys.exit(f"FAIL get: {reply}")
-    print("OK get (exec, silent via approve-all)")
+    print("OK get (exec, silent on the no-prompt tier)")
 
     reply = roundtrip(sock, {"v": 1, "op": "get", "profile": args.noexport_profile,
                              "purpose": "export"})

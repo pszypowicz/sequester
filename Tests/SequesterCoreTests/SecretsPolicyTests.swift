@@ -1,53 +1,59 @@
 import Testing
+import Foundation
 import SecretsWire
 @testable import SequesterCore
 
 @Suite struct SecretsPolicyTests {
 
-    private func outcome(tier: SecretTier = .everyRead, standing: AppStanding,
-                         operation: SecretsPolicy.Operation = .get,
-                         approveAll: Bool = false) -> SecretsPolicy.Outcome {
-        SecretsPolicy.outcome(tier: tier, standing: standing, operation: operation, approveAll: approveAll)
+    @Test func readsFollowTheTier() {
+        #expect(SecretsPolicy.outcome(tier: .everyRead, operation: .get, graceActive: false) == .proceed)
+        #expect(SecretsPolicy.outcome(tier: .noPrompt, operation: .get, graceActive: false) == .proceed)
+        #expect(SecretsPolicy.outcome(tier: .confirmEveryRead, operation: .get, graceActive: false) == .dialogAsk)
     }
 
-    @Test func blockedDeniesEveryOperation() {
+    @Test func graceOnlyWaivesTheConfirmTier() {
+        #expect(SecretsPolicy.outcome(tier: .confirmEveryRead, operation: .get, graceActive: true) == .proceed)
+        // The Enclave prompt is in the key's access control, so a grace
+        // window cannot skip it either way.
+        #expect(SecretsPolicy.outcome(tier: .everyRead, operation: .get, graceActive: true) == .proceed)
+    }
+
+    @Test func managementAlwaysConfirms() {
         for tier in SecretTier.allCases {
-            for operation in [SecretsPolicy.Operation.get, .set, .rm] {
-                #expect(outcome(tier: tier, standing: .blocked, operation: operation) == .deny(.appBlocked))
+            for operation in [SecretsPolicy.Operation.set, .rm] {
+                #expect(SecretsPolicy.outcome(tier: tier, operation: operation, graceActive: false) == .dialogAsk)
+                #expect(SecretsPolicy.outcome(tier: tier, operation: operation, graceActive: true) == .dialogAsk)
             }
         }
     }
+}
 
-    @Test func blockedDeniesDespiteApproveAll() {
-        for tier in SecretTier.allCases {
-            #expect(outcome(tier: tier, standing: .blocked, approveAll: true) == .deny(.appBlocked))
-        }
+@Suite struct SecretsGraceWindowsTests {
+
+    private let epoch = Date(timeIntervalSince1970: 1_000_000)
+
+    @Test func grantIsScopedToOneProfile() {
+        let windows = SecretsGraceWindows()
+        windows.grant(profile: "a", now: epoch)
+        #expect(windows.isActive(profile: "a", now: epoch))
+        #expect(!windows.isActive(profile: "b", now: epoch))
     }
 
-    @Test func allowedReadsSilently() {
-        for tier in SecretTier.allCases {
-            #expect(outcome(tier: tier, standing: .allowed) == .silentAllow)
-        }
+    @Test func windowExpires() {
+        let windows = SecretsGraceWindows()
+        windows.grant(profile: "a", now: epoch)
+        #expect(windows.isActive(profile: "a", now: epoch.addingTimeInterval(SecretsGraceWindows.duration - 1)))
+        #expect(!windows.isActive(profile: "a", now: epoch.addingTimeInterval(SecretsGraceWindows.duration)))
     }
 
-    @Test func approveAllReadsSilentlyForUnknown() {
-        for tier in SecretTier.allCases {
-            #expect(outcome(tier: tier, standing: .unknown, approveAll: true) == .silentAllow)
-        }
+    @Test func revokeClosesTheWindow() {
+        let windows = SecretsGraceWindows()
+        windows.grant(profile: "a", now: epoch)
+        windows.revoke(profile: "a")
+        #expect(!windows.isActive(profile: "a", now: epoch))
     }
 
-    @Test func unknownReaderAsksPerTier() {
-        #expect(outcome(tier: .everyRead, standing: .unknown) == .dialogAsk)
-        #expect(outcome(tier: .policyOnly, standing: .unknown) == .dialogAsk)
-        #expect(outcome(tier: .unapprovedOnly, standing: .unknown) == .biometricGate)
-    }
-
-    @Test func managementAlwaysAsks() {
-        for tier in SecretTier.allCases {
-            for standing in [AppStanding.allowed, .unknown] {
-                #expect(outcome(tier: tier, standing: standing, operation: .set, approveAll: true) == .dialogAsk)
-                #expect(outcome(tier: tier, standing: standing, operation: .rm, approveAll: true) == .dialogAsk)
-            }
-        }
+    @Test func noWindowWithoutAGrant() {
+        #expect(!SecretsGraceWindows().isActive(profile: "a", now: epoch))
     }
 }

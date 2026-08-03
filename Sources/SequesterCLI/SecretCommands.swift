@@ -10,17 +10,17 @@ struct Secret: ParsableCommand {
     )
 }
 
-/// The CLI spelling of the Touch ID tiers.
-enum TouchIDOption: String, ExpressibleByArgument, CaseIterable {
-    case everyRead = "every-read"
-    case unapproved
-    case never
+/// The CLI spelling of the confirmation tiers.
+enum PromptOption: String, ExpressibleByArgument, CaseIterable {
+    case touchID = "touch-id"
+    case confirm
+    case none
 
     var tier: SecretTier {
         switch self {
-        case .everyRead: .everyRead
-        case .unapproved: .unapprovedOnly
-        case .never: .policyOnly
+        case .touchID: .everyRead
+        case .confirm: .confirmEveryRead
+        case .none: .noPrompt
         }
     }
 }
@@ -29,7 +29,7 @@ struct SecretSet: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "set",
         abstract: "Create a profile or set variable values.",
-        discussion: "Values are prompted on the terminal with echo off; they never appear on the command line. The --touch-id and --no-export flags apply only when the profile is created and are permanent."
+        discussion: "Values are prompted on the terminal with echo off; they never appear on the command line. The --prompt and --no-export flags apply only when the profile is created and are permanent."
     )
 
     @Argument(help: "Profile name.")
@@ -38,9 +38,9 @@ struct SecretSet: ParsableCommand {
     @Argument(help: "Variable names to set; each value is prompted.")
     var keys: [String]
 
-    @Option(name: .customLong("touch-id"),
-            help: "Touch ID tier when creating: every-read (Enclave-enforced, the default), unapproved, or never.")
-    var touchID: TouchIDOption?
+    @Option(name: .customLong("prompt"),
+            help: "How reads are confirmed when creating: touch-id (Enclave-enforced, the default), confirm, or none.")
+    var prompt: PromptOption?
 
     @Flag(name: .customLong("no-export"),
           help: "When creating, refuse env export for this profile so values stay off stdout.")
@@ -65,8 +65,8 @@ struct SecretSet: ParsableCommand {
             for key in keys {
                 values[key] = try ValuePrompt.read(key: key)
             }
-            let create: CreateOptions? = (touchID != nil || noExport)
-                ? CreateOptions(tier: (touchID ?? .everyRead).tier, exportDisabled: noExport)
+            let create: CreateOptions? = (prompt != nil || noExport)
+                ? CreateOptions(tier: (prompt ?? .touchID).tier, exportDisabled: noExport)
                 : nil
             let response = try SecretsClient()
                 .send(SecretsRequest(op: .set, profile: profile, values: values, create: create))
@@ -87,7 +87,7 @@ struct SecretSet: ParsableCommand {
 struct SecretList: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
-        abstract: "List profiles, their Touch ID tier, and their variable names."
+        abstract: "List profiles, how each confirms reads, and their variable names."
     )
 
     func run() throws {

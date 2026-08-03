@@ -132,7 +132,7 @@ public enum Selftest {
             guard opened == values else { throw CryptoKitError.authenticationFailure }
         }
         check("create profile (keychain + enclave)") {
-            try EnclaveProfileStore.create(name: temporaryProfileName, tier: .policyOnly,
+            try EnclaveProfileStore.create(name: temporaryProfileName, tier: .confirmEveryRead,
                                            exportDisabled: false, values: ["SEQ_TEST_A": "alpha"])
         }
         check("profile listed") {
@@ -158,17 +158,8 @@ public enum Selftest {
         }
         check("profile metadata update") {
             try EnclaveProfileStore.setExportDisabled(name: temporaryProfileName, disabled: true)
-            try EnclaveProfileStore.setApproveAll(name: temporaryProfileName, enabled: true)
-            try EnclaveProfileStore.setAppRule(name: temporaryProfileName, identity: "devid:TEST:selftest",
-                                               displayName: "selftest", state: .blocked)
-            var metadata = try ProfileStorage.load(name: temporaryProfileName).metadata
-            guard metadata.exportDisabled, metadata.approveAll,
-                  metadata.appRules.first?.state == .blocked else {
-                throw KeychainError.corruptItem
-            }
-            EnclaveProfileStore.removeAppRule(name: temporaryProfileName, identity: "devid:TEST:selftest")
-            metadata = try ProfileStorage.load(name: temporaryProfileName).metadata
-            guard metadata.appRules.isEmpty else { throw KeychainError.corruptItem }
+            let metadata = try ProfileStorage.load(name: temporaryProfileName).metadata
+            guard metadata.exportDisabled else { throw KeychainError.corruptItem }
         }
         check("profile rename") {
             try EnclaveProfileStore.rename(name: temporaryProfileName, to: "selftest-profile-renamed")
@@ -184,15 +175,14 @@ public enum Selftest {
         return failed ? 1 : 0
     }
 
-    /// Creates a fixed-content test profile that reads without any prompt
-    /// (policy-only plus approve-all), for scripts/secrets-e2e.py.
+    /// Creates a fixed-content test profile that reads without any prompt,
+    /// for scripts/secrets-e2e.py.
     public static func createProfile(name: String, exportDisabled: Bool) -> Int32 {
         do {
             _ = try EnclaveProfileStore.create(
-                name: name, tier: .policyOnly, exportDisabled: exportDisabled,
+                name: name, tier: .noPrompt, exportDisabled: exportDisabled,
                 values: ["SEQ_TEST_A": "alpha", "SEQ_TEST_B": "beta"]
             )
-            try EnclaveProfileStore.setApproveAll(name: name, enabled: true)
             print("created \(name)")
             return 0
         } catch {

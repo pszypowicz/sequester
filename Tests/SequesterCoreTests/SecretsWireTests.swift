@@ -7,7 +7,7 @@ import SecretsWire
     @Test func requestRoundTrip() throws {
         let request = SecretsRequest(op: .set, profile: "deploy",
                                      values: ["A": "1"],
-                                     create: CreateOptions(tier: .unapprovedOnly, exportDisabled: true))
+                                     create: CreateOptions(tier: .confirmEveryRead, exportDisabled: true))
         let decoded = try SecretsCodec.decode(SecretsRequest.self, from: SecretsCodec.encode(request))
         #expect(decoded == request)
         #expect(decoded.v == SecretsWireLimits.version)
@@ -38,8 +38,8 @@ import SecretsWire
     @Test func tierRawValuesAreStable() {
         // Wire contract: these strings appear in stored metadata and JSON.
         #expect(SecretTier.everyRead.rawValue == "everyRead")
-        #expect(SecretTier.unapprovedOnly.rawValue == "unapprovedOnly")
-        #expect(SecretTier.policyOnly.rawValue == "policyOnly")
+        #expect(SecretTier.confirmEveryRead.rawValue == "confirmEveryRead")
+        #expect(SecretTier.noPrompt.rawValue == "noPrompt")
     }
 
     @Test func errorCodesAreStable() {
@@ -53,8 +53,8 @@ import SecretsWire
 
     @Test func enforcementLabelsAreHonest() {
         #expect(SecretTier.everyRead.enforcementLabel == "Enforced by the Secure Enclave")
-        #expect(SecretTier.unapprovedOnly.enforcementLabel == "Enforced by Sequester")
-        #expect(SecretTier.policyOnly.enforcementLabel == "Enforced by Sequester")
+        #expect(SecretTier.confirmEveryRead.enforcementLabel == "Enforced by Sequester")
+        #expect(SecretTier.noPrompt.enforcementLabel == "Notification only")
     }
 
     @Test func socketPath() {

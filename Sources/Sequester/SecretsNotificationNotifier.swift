@@ -32,19 +32,6 @@ struct SecretsNotificationNotifier: SecretsNotifier {
         post(content, identifier: UUID().uuidString)
     }
 
-    func denied(profile: String?, requester: String) {
-        let content = UNMutableNotificationContent()
-        content.title = "Secrets access refused"
-        if let profile {
-            content.subtitle = "\u{1F510} \(profile)"
-            content.userInfo = ["profileName": profile]
-        }
-        content.body = "\u{1F6AB} Blocked app: \(requester)"
-        // A stable id per (profile, requester) collapses a retry storm into
-        // one banner instead of stacking a copy per rejected attempt.
-        post(content, identifier: "secrets-denied:\(profile ?? "-"):\(requester)")
-    }
-
     /// Second line: the profile, prefixed with a Touch ID or lock glyph.
     private func profileLine(_ profile: String, tier: SecretTier) -> String {
         "\(tier == .everyRead ? "\u{261D}\u{FE0F}" : "\u{1F510}") \(profile)"

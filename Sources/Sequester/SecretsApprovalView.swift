@@ -2,9 +2,9 @@ import SwiftUI
 import SequesterCore
 import SecretsWire
 
-/// The secrets approval dialog: what is being done to which profile, which
-/// variables are involved, who is asking, and for reads from an unknown app
-/// the same once/session/always choice the signing dialog offers.
+/// The secrets confirmation dialog: what is being done to which profile,
+/// which variables are involved, and, as context only, what the request was
+/// attributed to.
 struct SecretsApprovalView: View {
 
     let kind: SecretsApprovalRequest.Kind
@@ -12,15 +12,12 @@ struct SecretsApprovalView: View {
     let tier: SecretTier
     let variableNames: [String]
     let requester: String
-    /// Whether the requesting app has a verified identity, and so can be
-    /// remembered as allowed. Unverified peers can only be allowed once.
-    let verified: Bool
-    /// Whether an app-authorization decision is being asked for: a read
-    /// from an app with no standing yet.
-    let appDecisionNeeded: Bool
+    /// Whether the grace checkbox is offered; only a read of a
+    /// confirm-every-read profile can use one.
+    let offersGrace: Bool
     let complete: (SecretsApprovalDecision) -> Void
 
-    @State private var appScope: AppScope = .once
+    @State private var grantGrace = false
 
     private var headline: String {
         switch kind {
@@ -40,6 +37,10 @@ struct SecretsApprovalView: View {
         }
     }
 
+    private var graceTitle: String {
+        "Don't ask again for \(Int(SecretsGraceWindows.duration / 60)) minutes"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
@@ -54,7 +55,7 @@ struct SecretsApprovalView: View {
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
-                    detailRow(title: "Requested by", value: requester)
+                    detailRow(title: "Attributed to", value: requester)
                     if !variableNames.isEmpty {
                         detailRow(title: "Variables", value: variableNames.joined(separator: ", "))
                     }
@@ -63,51 +64,32 @@ struct SecretsApprovalView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            if appDecisionNeeded {
-                if verified {
-                    Picker("When I allow:", selection: $appScope) {
-                        Text("Just this time").tag(AppScope.once)
-                        Text("For this session").tag(AppScope.session)
-                        Text("Always allow this app").tag(AppScope.always)
-                    }
-                    .pickerStyle(.menu)
-                    .fixedSize()
-                } else {
-                    Label("Unverified app: it can be allowed only for this one request.",
-                          systemImage: "exclamationmark.shield")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
+            if offersGrace {
+                Toggle(graceTitle, isOn: $grantGrace)
+                    .toggleStyle(.checkbox)
             }
 
+            // The attribution is what macOS holds responsible for the
+            // command, which any local process can arrange; it identifies
+            // the request, it does not vouch for it.
+            Label("Any program you run can ask for this. The name above is where the request came from, not proof of who sent it.",
+                  systemImage: "info.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             HStack {
-                if appDecisionNeeded {
-                    Button("Block App", role: .destructive) {
-                        complete(SecretsApprovalDecision(allowed: false, appScope: .block))
-                    }
-                }
                 Spacer()
                 Button("Deny") {
                     complete(.deny)
                 }
                 .keyboardShortcut(.cancelAction)
-                if kind == .delete {
-                    Button(allowTitle) {
-                        complete(SecretsApprovalDecision(allowed: true))
-                    }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                } else {
-                    Button(allowTitle) {
-                        complete(SecretsApprovalDecision(
-                            allowed: true,
-                            appScope: (appDecisionNeeded && verified) ? appScope : .once
-                        ))
-                    }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                Button(allowTitle) {
+                    complete(SecretsApprovalDecision(allowed: true, grantGrace: offersGrace && grantGrace))
                 }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .tint(kind == .delete ? .red : .accentColor)
             }
         }
         .padding(20)

@@ -7,14 +7,6 @@ public enum AppState: String, Codable, Sendable {
     case blocked
 }
 
-/// Which credential domain an authorization governs. SSH keys and secrets
-/// profiles keep separate allowlists and session grants, so an app trusted
-/// to request signatures is not thereby trusted to read secrets.
-public enum AuthorizationDomain: String, CaseIterable, Sendable {
-    case ssh
-    case secrets
-}
-
 /// A persisted global authorization for an app, keyed by its verified code
 /// identity (`Provenance.identityKey`), which is stable across app updates.
 public struct AppAuthorization: Codable, Hashable, Sendable, Identifiable {
@@ -89,21 +81,19 @@ public final class AppSessionGrants: @unchecked Sendable {
     public static let shared = AppSessionGrants()
 
     private let lock = NSLock()
-    private var allowed: Set<String> = []   // "<domain>:<identityKey>@<instance>"
+    private var allowed: Set<String> = []   // "<identityKey>@<instance>"
     private var blocked: Set<String> = []   // "<instance>"
 
     public init() {}
 
-    /// Session allows are scoped to one domain; a session block silences an
-    /// unverified peer entirely, so it covers both.
-    public func allow(identity: String, instance: String, domain: AuthorizationDomain) {
+    public func allow(identity: String, instance: String) {
         lock.lock(); defer { lock.unlock() }
-        allowed.insert("\(domain.rawValue):\(identity)@\(instance)")
+        allowed.insert("\(identity)@\(instance)")
     }
 
-    public func isAllowed(identity: String, instance: String, domain: AuthorizationDomain) -> Bool {
+    public func isAllowed(identity: String, instance: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        return allowed.contains("\(domain.rawValue):\(identity)@\(instance)")
+        return allowed.contains("\(identity)@\(instance)")
     }
 
     public func block(instance: String) {
@@ -124,29 +114,28 @@ public final class AppSessionGrants: @unchecked Sendable {
 }
 
 /// Persists what a user chose to remember about a requesting app when
-/// answering an approval dialog, within one authorization domain. A
-/// permanent allow or block needs a verified identity; an unverified peer
-/// can only be blocked for the session. Shared by the agent and the secrets
-/// broker so both record scope decisions identically.
+/// answering an approval dialog. A permanent allow or block needs a verified
+/// identity; an unverified peer can only be blocked for the session. Shared
+/// by the agent and the secrets broker so both record scope decisions
+/// identically.
 public enum AppDecisionRecorder {
-    public static func apply(_ scope: AppScope, provenance: Provenance, instanceID: String?,
-                             domain: AuthorizationDomain) {
+    public static func apply(_ scope: AppScope, provenance: Provenance, instanceID: String?) {
         switch scope {
         case .once:
             break
         case .session:
             if let identity = provenance.identityKey, let instance = instanceID {
-                AppSessionGrants.shared.allow(identity: identity, instance: instance, domain: domain)
+                AppSessionGrants.shared.allow(identity: identity, instance: instance)
             }
         case .always:
             if let identity = provenance.identityKey {
                 AppAuthorizationStore.setState(identity: identity, displayName: provenance.displayName,
-                                               state: .allowed, domain: domain, now: Date())
+                                               state: .allowed, now: Date())
             }
         case .block:
             if let identity = provenance.identityKey {
                 AppAuthorizationStore.setState(identity: identity, displayName: provenance.displayName,
-                                               state: .blocked, domain: domain, now: Date())
+                                               state: .blocked, now: Date())
             } else if let instance = instanceID {
                 AppSessionGrants.shared.block(instance: instance)
             }

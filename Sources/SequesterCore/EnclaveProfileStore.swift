@@ -148,6 +148,7 @@ public enum EnclaveProfileStore {
         try ProfileStorage.replace(name: name,
                                    value: StoredProfileValue(keyData: stored.value.keyData, sealed: sealed),
                                    metadata: metadata)
+        SecretsGraceWindows.shared.revoke(profile: name)
         Log.secrets.log("Updated values of profile \(name, privacy: .public), now \(values.count, privacy: .public) variables")
         return metadata
     }
@@ -166,47 +167,16 @@ public enum EnclaveProfileStore {
     @discardableResult
     public static func setExportDisabled(name: String, disabled: Bool) throws -> ProfileMetadata {
         let metadata = try ProfileStorage.mutate(name: name) { $0.exportDisabled = disabled; return true }
+        SecretsGraceWindows.shared.revoke(profile: name)
         Log.secrets.log("Set exportDisabled of profile \(name, privacy: .public) to \(disabled, privacy: .public)")
         return metadata
-    }
-
-    @discardableResult
-    public static func setApproveAll(name: String, enabled: Bool) throws -> ProfileMetadata {
-        let metadata = try ProfileStorage.mutate(name: name) { $0.approveAll = enabled; return true }
-        Log.secrets.log("Set approveAll of profile \(name, privacy: .public) to \(enabled, privacy: .public)")
-        return metadata
-    }
-
-    /// Sets a per-profile override of an app's standing, taking precedence
-    /// over the global authorization for this profile.
-    @discardableResult
-    public static func setAppRule(name: String, identity: String, displayName: String, state: AppState) throws -> ProfileMetadata {
-        let metadata = try ProfileStorage.mutate(name: name) { m in
-            if let index = m.appRules.firstIndex(where: { $0.identity == identity }) {
-                m.appRules[index].state = state
-                m.appRules[index].displayName = displayName
-            } else {
-                m.appRules.append(AppRule(identity: identity, displayName: displayName, state: state))
-            }
-            return true
-        }
-        Log.secrets.log("Set app rule \(identity, privacy: .public) on profile \(name, privacy: .public) to \(state.rawValue, privacy: .public)")
-        return metadata
-    }
-
-    public static func removeAppRule(name: String, identity: String) {
-        _ = try? ProfileStorage.mutate(name: name) { m in
-            let before = m.appRules.count
-            m.appRules.removeAll { $0.identity == identity }
-            return m.appRules.count != before
-        }
-        Log.secrets.log("Removed app rule \(identity, privacy: .public) on profile \(name, privacy: .public)")
     }
 
     /// Deletes the keychain item, which holds the only copies of the Enclave
     /// key handle and the ciphertext, so the values are unrecoverable.
     public static func delete(name: String) throws {
         try ProfileStorage.delete(name: name)
+        SecretsGraceWindows.shared.revoke(profile: name)
         Log.secrets.log("Deleted profile \(name, privacy: .public)")
     }
 }

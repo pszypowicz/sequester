@@ -7,7 +7,7 @@ import SequesterCore
 struct SecretsDialogApprover: SecretsApprover {
 
     func approve(_ request: SecretsApprovalRequest) async -> SecretsApprovalDecision {
-        Log.app.log("Secrets dialog for profile \(request.profileName, privacy: .public), kind \(String(describing: request.kind), privacy: .public), requester \(request.provenance.displayName, privacy: .public)")
+        Log.app.log("Secrets dialog for profile \(request.profileName, privacy: .public), kind \(String(describing: request.kind), privacy: .public), requester \(request.requester, privacy: .public)")
         let decision = await MainActor.run { present(request) }
         Log.app.log("Secrets dialog result for \(request.profileName, privacy: .public): allowed \(decision.allowed, privacy: .public)")
         return decision
@@ -33,9 +33,8 @@ struct SecretsDialogApprover: SecretsApprover {
             profileName: request.profileName,
             tier: request.tier,
             variableNames: request.variableNames,
-            requester: "\(request.provenance.displayName) (pid \(request.provenance.pid))",
-            verified: request.provenance.identityKey != nil,
-            appDecisionNeeded: request.kind == .read && request.appStanding == .unknown
+            requester: request.requester,
+            offersGrace: request.offersGrace
         ) { result in
             decision = result
             NSApp.stopModal()

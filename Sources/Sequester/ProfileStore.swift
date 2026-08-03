@@ -52,11 +52,6 @@ final class ProfileStore {
         reload()
     }
 
-    func setApproveAll(name: String, enabled: Bool) throws {
-        try EnclaveProfileStore.setApproveAll(name: name, enabled: enabled)
-        reload()
-    }
-
     /// Values edited in settings still decrypt and re-seal, so an everyRead
     /// profile prompts once here.
     func updateValues(name: String, setting: [String: String], removing: Set<String>) throws {
@@ -64,16 +59,6 @@ final class ProfileStore {
             name: name, setting: setting, removing: removing,
             reason: "update secrets profile \"\(name)\" from Sequester settings"
         )
-        reload()
-    }
-
-    func setAppRule(name: String, identity: String, displayName: String, state: AppState) {
-        _ = try? EnclaveProfileStore.setAppRule(name: name, identity: identity, displayName: displayName, state: state)
-        reload()
-    }
-
-    func removeAppRule(name: String, identity: String) {
-        EnclaveProfileStore.removeAppRule(name: name, identity: identity)
         reload()
     }
 

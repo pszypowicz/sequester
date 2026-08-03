@@ -198,8 +198,8 @@ struct KeyListView: View {
     private func profileIcon(_ profile: ProfileMetadata) -> String {
         switch profile.tier {
         case .everyRead: "touchid"
-        case .unapprovedOnly: "lock.shield"
-        case .policyOnly: "lock.open"
+        case .confirmEveryRead: "lock.shield"
+        case .noPrompt: "lock.open"
         }
     }
 }

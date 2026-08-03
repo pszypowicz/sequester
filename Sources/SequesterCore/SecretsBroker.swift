@@ -1,19 +1,28 @@
 import Foundation
 import SecretsWire
 
-/// Per-connection state for the secrets socket: the connecting peer
-/// (usually the bundled CLI) and the responsible process. Policy keys on
-/// the responsible process, because the peer is always the CLI itself and
-/// peer identity alone would approve anything that shells out to it.
+/// Per-connection state for the secrets socket: the connecting peer (the
+/// bundled CLI) and the process macOS holds responsible for it, which is
+/// usually the terminal or IDE the command was run from.
+///
+/// Both are recorded for the prompts, the notifications, and the log, and
+/// neither authorizes anything. Any local process can run the CLI, and the
+/// responsible process is a presentation detail macOS derives for its own
+/// UI, so treating it as a policy subject would promise a boundary the app
+/// cannot hold.
 public final class SecretsSession: Sendable {
     public let peer: Provenance
     public let responsible: Provenance
-    public let responsibleInstanceID: String?
 
-    public init(peer: Provenance, responsible: Provenance, responsibleInstanceID: String?) {
+    public init(peer: Provenance, responsible: Provenance) {
         self.peer = peer
         self.responsible = responsible
-        self.responsibleInstanceID = responsibleInstanceID
+    }
+
+    /// Best-effort label for the requester, shown in prompts and
+    /// notifications as context.
+    public var requesterLabel: String {
+        responsible.displayName
     }
 }
 
@@ -30,9 +39,9 @@ public struct SecretsService: MessageService {
 
     public func makeSession(socket fd: Int32) -> SecretsSession {
         let peer = ProvenanceTracer.provenance(socket: fd)
-        let (responsible, instanceID) = ProvenanceTracer.responsibleProvenance(forPid: peer.pid)
-        Log.secrets.debug("Secrets connection opened by \(peer.displayName, privacy: .public) (pid \(peer.pid, privacy: .public)), responsible \(responsible.displayName, privacy: .public)")
-        return SecretsSession(peer: peer, responsible: responsible, responsibleInstanceID: instanceID)
+        let (responsible, _) = ProvenanceTracer.responsibleProvenance(forPid: peer.pid)
+        Log.secrets.debug("Secrets connection opened by \(peer.displayName, privacy: .public) (pid \(peer.pid, privacy: .public)), attributed to \(responsible.displayName, privacy: .public)")
+        return SecretsSession(peer: peer, responsible: responsible)
     }
 
     public func handle(message: Data, session: SecretsSession) async -> Data {
@@ -53,33 +62,31 @@ public struct SecretsApprovalRequest: Sendable {
     public let kind: Kind
     public let variableNames: [String]
     public let tier: SecretTier
-    /// The responsible process, which is what the user is authorizing.
-    public let provenance: Provenance
-    public let appStanding: AppStanding
-    /// Whether the once/session/always picker is offered: read requests
-    /// from a verified responsible process with no standing yet.
-    public let offersScope: Bool
+    /// Best-effort attribution of the request, for context only.
+    public let requester: String
+    /// Whether the dialog offers a grace window, which only a read of a
+    /// confirm-every-read profile can use.
+    public let offersGrace: Bool
 
     public init(profileName: String, kind: Kind, variableNames: [String], tier: SecretTier,
-                provenance: Provenance, appStanding: AppStanding, offersScope: Bool) {
+                requester: String, offersGrace: Bool) {
         self.profileName = profileName
         self.kind = kind
         self.variableNames = variableNames
         self.tier = tier
-        self.provenance = provenance
-        self.appStanding = appStanding
-        self.offersScope = offersScope
+        self.requester = requester
+        self.offersGrace = offersGrace
     }
 }
 
 public struct SecretsApprovalDecision: Sendable {
     public var allowed: Bool
-    /// What to remember about the requesting app beyond this request.
-    public var appScope: AppScope
+    /// Waive confirmation for this profile for the next few minutes.
+    public var grantGrace: Bool
 
-    public init(allowed: Bool, appScope: AppScope = .once) {
+    public init(allowed: Bool, grantGrace: Bool = false) {
         self.allowed = allowed
-        self.appScope = appScope
+        self.grantGrace = grantGrace
     }
 
     public static let deny = SecretsApprovalDecision(allowed: false)
@@ -97,36 +104,26 @@ public enum ProfileChange: String, Sendable {
     case deleted
 }
 
-/// Notified after every completed secrets operation so unexpected access
-/// surfaces. `silent` is true when values were handed out with no user
-/// interaction at all.
+/// Notified after every completed secrets operation, which is what makes
+/// use visible when no prompt was shown. `silent` is true when values were
+/// handed out with no user interaction at all.
 public protocol SecretsNotifier: Sendable {
     func read(profile: String, tier: SecretTier, requester: String, silent: Bool)
     func changed(profile: String, change: ProfileChange, requester: String)
-    func denied(profile: String?, requester: String)
 }
 
-/// The app-evaluated biometric check gating unapprovedOnly reads. Injected
-/// so the broker stays testable without LocalAuthentication.
-public protocol BiometricGate: Sendable {
-    func evaluate(reason: String) async -> Bool
-}
-
-/// The secrets protocol handler: parses one framed JSON request, resolves
-/// policy against the responsible process, drives the approval dialog and
-/// the biometric gate, and performs the storage operation. Values cross the
-/// socket only in `get` responses and `set` requests.
+/// The secrets protocol handler: parses one framed JSON request, applies
+/// the profile's own policy, drives the confirmation dialog, and performs
+/// the storage operation. Values cross the socket only in `get` responses
+/// and `set` requests.
 public struct SecretsBroker: Sendable {
 
     private let approver: any SecretsApprover
     private let notifier: (any SecretsNotifier)?
-    private let biometric: any BiometricGate
 
-    public init(approver: any SecretsApprover, notifier: (any SecretsNotifier)? = nil,
-                biometric: any BiometricGate) {
+    public init(approver: any SecretsApprover, notifier: (any SecretsNotifier)? = nil) {
         self.approver = approver
         self.notifier = notifier
-        self.biometric = biometric
     }
 
     public func handle(message: Data, session: SecretsSession) async -> Data {
@@ -159,11 +156,8 @@ public struct SecretsBroker: Sendable {
     // MARK: - Operations
 
     private func handleList(session: SecretsSession) -> SecretsResponse {
-        if standing(for: session, profile: nil) == .blocked {
-            return refuse(profile: nil, session: session, op: "list")
-        }
         let profiles = EnclaveProfileStore.list().map(\.summary)
-        Log.secrets.debug("Listed \(profiles.count, privacy: .public) profiles for \(session.responsible.displayName, privacy: .public)")
+        Log.secrets.debug("Listed \(profiles.count, privacy: .public) profiles for \(session.requesterLabel, privacy: .public)")
         return SecretsResponse(ok: true, profiles: profiles)
     }
 
@@ -179,42 +173,28 @@ public struct SecretsBroker: Sendable {
             return .failure(.exportDisabled, "Profile \"\(name)\" does not allow env export. Use env exec instead.")
         }
 
-        let standing = standing(for: session, profile: metadata)
-        let outcome = SecretsPolicy.outcome(tier: metadata.tier, standing: standing,
-                                            operation: .get, approveAll: metadata.approveAll)
-        Log.secrets.log("Get request: profile \(name, privacy: .public), requester \(session.responsible.displayName, privacy: .public) (pid \(session.responsible.pid, privacy: .public)), peer \(session.peer.displayName, privacy: .public), standing \(String(describing: standing), privacy: .public), outcome \(String(describing: outcome), privacy: .public)")
+        let graceActive = SecretsGraceWindows.shared.isActive(profile: name)
+        let outcome = SecretsPolicy.outcome(tier: metadata.tier, operation: .get, graceActive: graceActive)
+        Log.secrets.log("Get request: profile \(name, privacy: .public), tier \(metadata.tier.rawValue, privacy: .public), requester \(session.requesterLabel, privacy: .public), peer \(session.peer.displayName, privacy: .public), grace \(graceActive, privacy: .public), outcome \(String(describing: outcome), privacy: .public)")
 
-        var interacted = false
-        switch outcome {
-        case .deny:
-            return refuse(profile: name, session: session, op: "get")
-        case .silentAllow:
-            break
-        case .dialogAsk:
-            guard await approve(kind: .read, metadata: metadata, session: session, standing: standing) else {
+        var confirmed = false
+        if outcome == .dialogAsk {
+            let decision = await approve(kind: .read, metadata: metadata, session: session,
+                                         offersGrace: metadata.tier == .confirmEveryRead)
+            guard decision.allowed else {
                 return .failure(.denied, "Refused.")
             }
-            interacted = true
-        case .biometricGate:
-            // The dialog runs first when it can capture a standing decision;
-            // for an unverified requester the biometric prompt, whose reason
-            // names profile and requester, doubles as the approval.
-            if standing == .unknown && session.responsible.identityKey != nil {
-                guard await approve(kind: .read, metadata: metadata, session: session, standing: standing) else {
-                    return .failure(.denied, "Refused.")
-                }
+            if decision.grantGrace {
+                SecretsGraceWindows.shared.grant(profile: name)
             }
-            guard await biometric.evaluate(reason: readReason(metadata: metadata, session: session)) else {
-                return .failure(.authFailed, "Authentication failed.")
-            }
-            interacted = true
+            confirmed = true
         }
 
         do {
             let values = try EnclaveProfileStore.readValues(name: name, reason: readReason(metadata: metadata, session: session))
-            let silent = !interacted && metadata.tier != .everyRead
+            let silent = !confirmed && metadata.tier != .everyRead
             notifier?.read(profile: name, tier: metadata.tier,
-                           requester: session.responsible.displayName, silent: silent)
+                           requester: session.requesterLabel, silent: silent)
             return SecretsResponse(ok: true, values: values, exportDisabled: metadata.exportDisabled)
         } catch {
             return decryptFailure(error, profile: name)
@@ -230,28 +210,20 @@ public struct SecretsBroker: Sendable {
         }
         let existing = EnclaveProfileStore.find(name: name)
         if existing != nil && request.create != nil {
-            return .failure(.exists, "Profile \"\(name)\" already exists; the Touch ID tier and export setting are fixed at creation.")
+            return .failure(.exists, "Profile \"\(name)\" already exists; the confirmation tier and export setting are fixed at creation.")
         }
 
         let create = request.create ?? CreateOptions(tier: .everyRead, exportDisabled: false)
         let tier = existing?.tier ?? create.tier
-        let standing = standing(for: session, profile: existing)
-        let outcome = SecretsPolicy.outcome(tier: tier, standing: standing,
-                                            operation: .set, approveAll: existing?.approveAll ?? false)
-        Log.secrets.log("Set request: profile \(name, privacy: .public), \(values.count, privacy: .public) variables, requester \(session.responsible.displayName, privacy: .public), standing \(String(describing: standing), privacy: .public), outcome \(String(describing: outcome), privacy: .public)")
-        if case .deny = outcome {
-            return refuse(profile: name, session: session, op: "set")
-        }
+        Log.secrets.log("Set request: profile \(name, privacy: .public), \(values.count, privacy: .public) variables, requester \(session.requesterLabel, privacy: .public)")
 
-        let variableNames = values.keys.sorted()
         let approvalRequest = SecretsApprovalRequest(
             profileName: name,
             kind: existing == nil ? .create : .update,
-            variableNames: variableNames,
+            variableNames: values.keys.sorted(),
             tier: tier,
-            provenance: session.responsible,
-            appStanding: standing,
-            offersScope: false
+            requester: session.requesterLabel,
+            offersGrace: false
         )
         guard await approver.approve(approvalRequest).allowed else {
             return .failure(.denied, "Refused.")
@@ -261,15 +233,15 @@ public struct SecretsBroker: Sendable {
             if existing != nil {
                 let metadata = try EnclaveProfileStore.updateValues(
                     name: name, setting: values,
-                    reason: "update secrets profile \"\(name)\", requested by \(session.responsible.displayName)"
+                    reason: "update secrets profile \"\(name)\", requested by \(session.requesterLabel)"
                 )
-                notifier?.changed(profile: name, change: .updated, requester: session.responsible.displayName)
+                notifier?.changed(profile: name, change: .updated, requester: session.requesterLabel)
                 return SecretsResponse(ok: true, created: false, variables: metadata.variableNames)
             }
             let metadata = try EnclaveProfileStore.create(
                 name: name, tier: create.tier, exportDisabled: create.exportDisabled, values: values
             )
-            notifier?.changed(profile: name, change: .created, requester: session.responsible.displayName)
+            notifier?.changed(profile: name, change: .created, requester: session.requesterLabel)
             return SecretsResponse(ok: true, created: true, variables: metadata.variableNames)
         } catch let error as ProfileStoreError {
             return .failure(.tooLarge, error.localizedDescription)
@@ -285,19 +257,13 @@ public struct SecretsBroker: Sendable {
         guard let metadata = EnclaveProfileStore.find(name: name) else {
             return .failure(.notFound, "No profile named \"\(name)\".")
         }
-        let standing = standing(for: session, profile: metadata)
-        let outcome = SecretsPolicy.outcome(tier: metadata.tier, standing: standing,
-                                            operation: .rm, approveAll: metadata.approveAll)
-        Log.secrets.log("Rm request: profile \(name, privacy: .public), requester \(session.responsible.displayName, privacy: .public), outcome \(String(describing: outcome), privacy: .public)")
-        if case .deny = outcome {
-            return refuse(profile: name, session: session, op: "rm")
-        }
-        guard await approve(kind: .delete, metadata: metadata, session: session, standing: standing) else {
+        Log.secrets.log("Rm request: profile \(name, privacy: .public), requester \(session.requesterLabel, privacy: .public)")
+        guard await approve(kind: .delete, metadata: metadata, session: session, offersGrace: false).allowed else {
             return .failure(.denied, "Refused.")
         }
         do {
             try EnclaveProfileStore.delete(name: name)
-            notifier?.changed(profile: name, change: .deleted, requester: session.responsible.displayName)
+            notifier?.changed(profile: name, change: .deleted, requester: session.requesterLabel)
             return SecretsResponse(ok: true)
         } catch {
             Log.secrets.error("Deleting profile \(name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
@@ -307,39 +273,18 @@ public struct SecretsBroker: Sendable {
 
     // MARK: - Helpers
 
-    private func standing(for session: SecretsSession, profile: ProfileMetadata?) -> AppStanding {
-        AppPolicy.standing(
-            identityKey: session.responsible.identityKey,
-            instance: session.responsibleInstanceID,
-            perKeyRules: profile?.appRules ?? [],
-            globalLookup: { AppAuthorizationStore.state(for: $0, domain: .secrets) },
-            sessionAllowed: { AppSessionGrants.shared.isAllowed(identity: $0, instance: $1, domain: .secrets) },
-            sessionBlocked: { AppSessionGrants.shared.isBlocked(instance: $0) }
-        )
-    }
-
     private func approve(kind: SecretsApprovalRequest.Kind, metadata: ProfileMetadata,
-                         session: SecretsSession, standing: AppStanding) async -> Bool {
-        let request = SecretsApprovalRequest(
+                         session: SecretsSession, offersGrace: Bool) async -> SecretsApprovalDecision {
+        let decision = await approver.approve(SecretsApprovalRequest(
             profileName: metadata.name,
             kind: kind,
             variableNames: metadata.variableNames,
             tier: metadata.tier,
-            provenance: session.responsible,
-            appStanding: standing,
-            offersScope: kind == .read && standing == .unknown && session.responsible.identityKey != nil
-        )
-        let decision = await approver.approve(request)
-        AppDecisionRecorder.apply(decision.appScope, provenance: session.responsible,
-                                  instanceID: session.responsibleInstanceID, domain: .secrets)
-        Log.secrets.log("Approval dialog for profile \(metadata.name, privacy: .public): allowed \(decision.allowed, privacy: .public), scope \(decision.appScope.rawValue, privacy: .public)")
-        return decision.allowed
-    }
-
-    private func refuse(profile: String?, session: SecretsSession, op: String) -> SecretsResponse {
-        Log.secrets.log("Refused \(op, privacy: .public) for \(session.responsible.displayName, privacy: .public): app blocked")
-        notifier?.denied(profile: profile, requester: session.responsible.displayName)
-        return .failure(.denied, "Refused by policy.")
+            requester: session.requesterLabel,
+            offersGrace: offersGrace
+        ))
+        Log.secrets.log("Dialog for profile \(metadata.name, privacy: .public): allowed \(decision.allowed, privacy: .public), grace \(decision.grantGrace, privacy: .public)")
+        return decision
     }
 
     private func validate(name: String, values: [String: String]) -> SecretsResponse? {
@@ -361,12 +306,11 @@ public struct SecretsBroker: Sendable {
         return nil
     }
 
-    /// The reason shown in the Enclave prompt or the biometric gate. The
-    /// requester name is attacker-influenced, so it comes last, after the
-    /// profile it must not be able to forge, and it is sanitized in
-    /// Provenance.displayName.
+    /// The reason shown in the Enclave prompt. The requester label is
+    /// attacker-influenced, so it comes last, after the profile it must not
+    /// be able to forge, and it is sanitized in Provenance.displayName.
     private func readReason(metadata: ProfileMetadata, session: SecretsSession) -> String {
-        "read secrets profile \"\(metadata.name)\", requested by \(session.responsible.displayName)"
+        "read secrets profile \"\(metadata.name)\", requested by \(session.requesterLabel)"
     }
 
     /// Cancelled Touch ID, a locked screen, and a corrupt blob all surface

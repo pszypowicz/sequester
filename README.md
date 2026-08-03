@@ -14,7 +14,7 @@ Early proof of concept. Working today:
 - SSH agent over a Unix socket (identity listing and signing).
 - Public key files on disk, one per key.
 - Per-key approval policy: per-destination standings plus block-forwarded, approve-local, approve-all, and lock, editable at any time.
-- Secrets profiles: Enclave-encrypted KEY=value sets with a per-profile Touch ID tier, per-caller policy, and a bundled CLI that loads them into a command's environment.
+- Secrets profiles: Enclave-encrypted KEY=value sets with a per-profile confirmation setting and a bundled CLI that loads them into a command's environment.
 - Start at login via the system login items mechanism, with no separate daemon.
 
 ## Install
@@ -60,29 +60,19 @@ Every signature posts a notification identifying the key and destination host, s
 
 Sequester also stores API tokens (PATs, service-principal secrets) as secrets profiles: named sets of KEY=value pairs encrypted as one blob under a Secure Enclave key and loaded into a command's environment through a bundled CLI. The app performs the policy check, the prompt, and the decryption, and a profile decrypts as one blob, so loading several variables costs one Touch ID tap.
 
-Each profile chooses a Touch ID tier at creation, and the choice is permanent:
+Each profile chooses at creation how its reads are confirmed, and the choice is permanent:
 
-| Tier                             | Behavior                                                                                            | Enforced by    |
-| -------------------------------- | --------------------------------------------------------------------------------------------------- | -------------- |
-| Touch ID on every read (default) | Every read prompts, even for approved apps. userPresence is baked into the key's access control.    | Secure Enclave |
-| Touch ID for unapproved callers  | Approved apps read silently. Every other caller must pass a Touch ID check the app evaluates first. | Sequester      |
-| Policy only                      | Unknown apps get an approval dialog, with no biometric check.                                       | Sequester      |
+| Confirmation                     | Behavior                                                                    | Enforced by       |
+| -------------------------------- | --------------------------------------------------------------------------- | ----------------- |
+| Touch ID on every read (default) | The Enclave refuses to decrypt without Touch ID, so every read costs a tap.  | Secure Enclave    |
+| Confirm every read               | Sequester asks in a dialog, which can waive the next five minutes.           | Sequester         |
+| No prompt                        | Reads proceed unattended, for automation that cannot answer a prompt.        | Notification only |
 
-Only the first tier is enforced by the hardware. The other two are app-level gates in front of a key the app could use without them, backed by verified caller identity, a signature-scoped policy store, and a notification on every read.
+Only the first is enforced by hardware. The second is an app-level gate in front of a key the app could use without it, and the third is no gate at all. Every read posts a notification whichever you pick, worded to stand out when nothing was asked, so unattended use stays visible. Creating, updating, or deleting a profile always confirms in the app.
 
-With the lid closed, every Touch ID prompt routes to a paired Apple Watch instead (a double press of the side button approves), for key signatures and profile reads alike. This needs "Use your Apple Watch to unlock your applications and your Mac" enabled in System Settings, and without it the prompts fall back to a password.
+Sequester deliberately offers no per-app permissions for secrets. Any program you run can execute the CLI, and the terminal or IDE macOS attributes a command to is a presentation detail rather than something an attacker is bound by, so an allowlist of approved apps would promise a boundary the app cannot hold. Prompts and notifications name where a request came from because that is useful context, and nothing decides access on it. The authorization is yours, per read, or waived by the confirmation setting you chose. SSH keys are different and keep their per-app rules: there the requester is verified from the connection itself, and each destination is checked against a host key the remote proved it holds.
 
-The caller a profile authorizes is the terminal or IDE the command runs from, resolved through macOS process responsibility and verified by code signature, because the socket peer is always the bundled CLI itself. Standings work like keys: neutral asks, approved reads silently, blocked denies without a prompt, with per-profile overrides on the profile's page. App authorizations are kept per domain, so allowing an app in a signing dialog says nothing about secrets and the Apps page lists the two sets separately. Creating, updating, or deleting a profile always shows a confirmation dialog in the app, and every read posts a notification.
-
-What a read costs follows from two independent axes: the app's standing (blocked, unknown, or allowed) and the profile's tier. The per-profile "Allow apps I haven't approved" setting changes exactly one thing: unknown apps behave as if they were allowed.
-
-| Security tier                   | Blocked app       | Unknown app                            | Unknown app, setting on | Allowed app           |
-| ------------------------------- | ----------------- | -------------------------------------- | ----------------------- | --------------------- |
-| Touch ID on every read          | denied, no prompt | approval dialog, then Enclave Touch ID | Enclave Touch ID only   | Enclave Touch ID only |
-| Touch ID for unapproved callers | denied, no prompt | approval dialog, then app Touch ID     | fully silent            | fully silent          |
-| Policy only                     | denied, no prompt | approval dialog                        | fully silent            | fully silent          |
-
-With the setting on, unknown apps never see a dialog, so they are never remembered or offered for blocking; only an app blocked beforehand is refused. Silent reads still post the "read without a prompt" notification.
+With the lid closed, every Touch ID prompt routes to a paired Apple Watch instead (a double press of the side button approves). This needs "Use your Apple Watch to unlock your applications and your Mac" enabled in System Settings, and without it the prompts fall back to a password.
 
 The `sequester` CLI ships inside the app bundle. Put it on PATH once:
 
@@ -101,9 +91,9 @@ sequester env export deploy --format fish | source   # fish
 sequester secret rm deploy
 ```
 
-`env exec` is the recommended path because values go straight into the child process. `env export` prints plaintext to stdout, where a terminal transcript or an AI coding agent's context can capture it, and a profile created with `--no-export` refuses it entirely. The other creation flag is `--touch-id every-read|unapproved|never`.
+`env exec` is the recommended path because values go straight into the child process. `env export` prints plaintext to stdout, where a terminal transcript or an AI coding agent's context can capture it, and a profile created with `--no-export` refuses it entirely. The other creation flag is `--prompt touch-id|confirm|none`.
 
-Two limitations are accepted by design. Variables in a child's environment are readable by other processes of the same user for the child's lifetime, which envchain and the password-manager CLIs share. And a headless invocation (cron, launchd) has no terminal to attribute, so responsibility resolves to the CLI itself, and approving that identity approves anything headless.
+One limitation is accepted by design: variables in a child's environment are readable by other processes of the same user for the child's lifetime, which envchain and the password-manager CLIs share.
 
 ## Setup
 

@@ -8,7 +8,6 @@ import SecretsWire
 struct ProfileDetailView: View {
 
     @Environment(ProfileStore.self) private var store
-    @Environment(AppAuthStore.self) private var appAuth
 
     let profile: ProfileMetadata
     @State private var errorMessage: String?
@@ -36,10 +35,6 @@ struct ProfileDetailView: View {
                 Toggle(isOn: exportDisabledBinding) {
                     settingLabel("Disable env export",
                                  "Refuses reads made for env export, so values never land on stdout where a transcript or an AI agent's context would capture them. env exec still works. This guards against accidents; a caller controls what it declares.")
-                }
-                Toggle(isOn: approveAllBinding) {
-                    settingLabel("Allow apps I haven't approved",
-                                 "Treats apps you have made no decision about as if they were allowed: their reads skip the approval dialog and the app-evaluated Touch ID check. Apps already allowed behave the same either way, blocked apps are still denied, and a \u{201C}\(SecretTier.everyRead.displayLabel)\u{201D} profile still prompts in the Enclave. For automation that cannot answer dialogs.")
                 }
             }
 
@@ -76,63 +71,6 @@ struct ProfileDetailView: View {
                     .foregroundStyle(.red)
             }
 
-            Section {
-                if profile.appRules.isEmpty {
-                    Text("No per-profile overrides. This profile uses the global app authorizations.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(profile.appRules) { rule in
-                        HStack(spacing: 10) {
-                            Image(systemName: rule.state == .blocked ? "xmark.shield.fill" : "checkmark.shield.fill")
-                                .foregroundStyle(rule.state == .blocked ? .red : .green)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(rule.displayName)
-                                Text(rule.identity)
-                                    .font(.system(.caption2, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            Spacer()
-                            Picker("", selection: appRuleBinding(rule)) {
-                                Text("Allowed").tag(AppState.allowed)
-                                Text("Blocked").tag(AppState.blocked)
-                            }
-                            .pickerStyle(.segmented)
-                            .fixedSize()
-                            Button {
-                                store.removeAppRule(name: profile.name, identity: rule.identity)
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-                let candidates = appAuth.secrets.filter { auth in
-                    !profile.appRules.contains { $0.identity == auth.identity }
-                }
-                if !candidates.isEmpty {
-                    Menu("Add override…") {
-                        ForEach(candidates) { auth in
-                            Menu(auth.displayName) {
-                                Button("Allow for this profile") {
-                                    store.setAppRule(name: profile.name, identity: auth.identity,
-                                                     displayName: auth.displayName, state: .allowed)
-                                }
-                                Button("Block for this profile") {
-                                    store.setAppRule(name: profile.name, identity: auth.identity,
-                                                     displayName: auth.displayName, state: .blocked)
-                                }
-                            }
-                        }
-                    }
-                }
-            } header: {
-                sectionHeader("App overrides", info: "Override the global authorization of a specific app for this profile only. The app is the terminal or IDE the read was started from, not the CLI itself.")
-            }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $editingValues) {
@@ -143,11 +81,11 @@ struct ProfileDetailView: View {
     private var enforcementInfo: String {
         switch profile.tier {
         case .everyRead:
-            "\(profile.tier.enforcementLabel): the requirement is baked into the Enclave key's access control, so even an approved app costs a tap."
-        case .unapprovedOnly:
-            "\(profile.tier.enforcementLabel): approved apps read silently; everyone else must pass a Touch ID check the app evaluates before decrypting."
-        case .policyOnly:
-            "\(profile.tier.enforcementLabel): unknown apps get an approval dialog, with no biometric check."
+            "\(profile.tier.enforcementLabel): the requirement is baked into the Enclave key's access control, so every read costs a tap."
+        case .confirmEveryRead:
+            "\(profile.tier.enforcementLabel): Sequester asks in a dialog before decrypting, and the dialog can waive the next few minutes."
+        case .noPrompt:
+            "\(profile.tier.enforcementLabel): reads proceed without confirmation. Every read still posts a notification."
         }
     }
 
@@ -176,28 +114,6 @@ struct ProfileDetailView: View {
                     errorMessage = error.localizedDescription
                 }
             }
-        )
-    }
-
-    private var approveAllBinding: Binding<Bool> {
-        Binding(
-            get: { profile.approveAll },
-            set: { enabled in
-                do {
-                    try store.setApproveAll(name: profile.name, enabled: enabled)
-                    errorMessage = nil
-                } catch {
-                    errorMessage = error.localizedDescription
-                }
-            }
-        )
-    }
-
-    private func appRuleBinding(_ rule: AppRule) -> Binding<AppState> {
-        Binding(
-            get: { rule.state },
-            set: { store.setAppRule(name: profile.name, identity: rule.identity,
-                                    displayName: rule.displayName, state: $0) }
         )
     }
 }
