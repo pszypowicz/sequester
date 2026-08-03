@@ -38,8 +38,8 @@ struct ProfileDetailView: View {
                                  "Refuses reads made for env export, so values never land on stdout where a transcript or an AI agent's context would capture them. env exec still works. This guards against accidents; a caller controls what it declares.")
                 }
                 Toggle(isOn: approveAllBinding) {
-                    settingLabel("Read without asking",
-                                 "Hands values to callers you have not authorized, without a dialog. Blocked apps are still denied, and a \u{201C}\(SecretTier.everyRead.displayLabel)\u{201D} profile still prompts in the Enclave. For automation that cannot answer dialogs.")
+                    settingLabel("Allow apps I haven't approved",
+                                 "Treats apps you have made no decision about as if they were allowed: their reads skip the approval dialog and the app-evaluated Touch ID check. Apps already allowed behave the same either way, blocked apps are still denied, and a \u{201C}\(SecretTier.everyRead.displayLabel)\u{201D} profile still prompts in the Enclave. For automation that cannot answer dialogs.")
                 }
             }
 

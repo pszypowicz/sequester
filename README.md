@@ -74,6 +74,16 @@ With the lid closed, every Touch ID prompt routes to a paired Apple Watch instea
 
 The caller a profile authorizes is the terminal or IDE the command runs from, resolved through macOS process responsibility and verified by code signature, because the socket peer is always the bundled CLI itself. Standings work like keys: neutral asks, approved reads silently, blocked denies without a prompt, with per-profile overrides on the profile's page. App authorizations are kept per domain, so allowing an app in a signing dialog says nothing about secrets and the Apps page lists the two sets separately. Creating, updating, or deleting a profile always shows a confirmation dialog in the app, and every read posts a notification.
 
+What a read costs follows from two independent axes: the app's standing (blocked, unknown, or allowed) and the profile's tier. The per-profile "Allow apps I haven't approved" setting changes exactly one thing: unknown apps behave as if they were allowed.
+
+| Security tier                   | Blocked app       | Unknown app                            | Unknown app, setting on | Allowed app           |
+| ------------------------------- | ----------------- | -------------------------------------- | ----------------------- | --------------------- |
+| Touch ID on every read          | denied, no prompt | approval dialog, then Enclave Touch ID | Enclave Touch ID only   | Enclave Touch ID only |
+| Touch ID for unapproved callers | denied, no prompt | approval dialog, then app Touch ID     | fully silent            | fully silent          |
+| Policy only                     | denied, no prompt | approval dialog                        | fully silent            | fully silent          |
+
+With the setting on, unknown apps never see a dialog, so they are never remembered or offered for blocking; only an app blocked beforehand is refused. Silent reads still post the "read without a prompt" notification.
+
 The `sequester` CLI ships inside the app bundle. Put it on PATH once:
 
 ```
