@@ -19,6 +19,12 @@ struct SetupView: View {
     private var refusedDestinationBlocked = NotificationSettings.Default.refusedDestinationBlocked
     @AppStorage(NotificationSettings.Key.refusedKeyLocked)
     private var refusedKeyLocked = NotificationSettings.Default.refusedKeyLocked
+    @AppStorage(NotificationSettings.Key.secretsReadSilently)
+    private var secretsReadSilently = NotificationSettings.Default.secretsReadSilently
+    @AppStorage(NotificationSettings.Key.secretsReadAfterPrompt)
+    private var secretsReadAfterPrompt = NotificationSettings.Default.secretsReadAfterPrompt
+    @AppStorage(NotificationSettings.Key.secretsChanged)
+    private var secretsChanged = NotificationSettings.Default.secretsChanged
     @State private var confirmSilentOff = false
     @State private var systemNotificationsOff = false
     @State private var loginEnabled = LoginItem.isEnabled
@@ -88,34 +94,46 @@ struct SetupView: View {
                         .font(.caption)
                     }
                 }
-                Toggle(isOn: silentBinding) {
-                    settingLabel("Signed without any prompt",
-                                 "A signature that showed no dialog and no Touch ID prompt. This notification is the only evidence such a use happened.")
-                }
-                Toggle(isOn: $signedAfterPrompt) {
-                    settingLabel("Signed after a prompt",
-                                 "A signature you just approved at a dialog or a Touch ID prompt, so the notification repeats what you have already seen.")
-                }
-                Toggle(isOn: $signedNewDestination) {
-                    settingLabel("Signed for a new destination",
-                                 "The first time a key signs for a host over a given route. Shown even when the two settings above are off.")
-                }
-                Toggle(isOn: $refusedAppBlocked) {
-                    settingLabel("Refused: app blocked",
-                                 "A request from an app you have blocked, refused before any prompt.")
-                }
-                Toggle(isOn: $refusedDestinationBlocked) {
-                    settingLabel("Refused: destination blocked",
-                                 "A request for a destination you have blocked, or a forwarded request to a key that refuses them.")
-                }
-                Toggle(isOn: $refusedKeyLocked) {
-                    settingLabel("Refused: key locked",
-                                 "A locked key asked to sign for a destination not on its list, which is how you learn it is being probed.")
-                }
+                NotificationToggle(title: NotificationWording.signedSilently.0,
+                                   info: NotificationWording.signedSilently.1,
+                                   isOn: silentBinding)
+                NotificationToggle(title: NotificationWording.signedAfterPrompt.0,
+                                   info: NotificationWording.signedAfterPrompt.1,
+                                   isOn: $signedAfterPrompt)
+                NotificationToggle(title: NotificationWording.signedNewDestination.0,
+                                   info: NotificationWording.signedNewDestination.1,
+                                   isOn: $signedNewDestination)
+                NotificationToggle(title: NotificationWording.refusedAppBlocked.0,
+                                   info: NotificationWording.refusedAppBlocked.1,
+                                   isOn: $refusedAppBlocked)
+                NotificationToggle(title: NotificationWording.refusedDestinationBlocked.0,
+                                   info: NotificationWording.refusedDestinationBlocked.1,
+                                   isOn: $refusedDestinationBlocked)
+                NotificationToggle(title: NotificationWording.refusedKeyLocked.0,
+                                   info: NotificationWording.refusedKeyLocked.1,
+                                   isOn: $refusedKeyLocked)
             } header: {
-                Text("Notifications")
+                Text("Notifications: keys")
             } footer: {
-                Text("A refused request tells the terminal only that the agent refused the operation, and a signature with no prompt shows nothing at all, so these notifications are the only account of what the agent did.")
+                Text("A refused request tells the terminal only that the agent refused the operation, and a signature with no prompt shows nothing at all, so these notifications are the only account of what the agent did. A key can set its own on its page.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NotificationToggle(title: NotificationWording.secretsReadSilently.0,
+                                   info: NotificationWording.secretsReadSilently.1,
+                                   isOn: $secretsReadSilently)
+                NotificationToggle(title: NotificationWording.secretsReadAfterPrompt.0,
+                                   info: NotificationWording.secretsReadAfterPrompt.1,
+                                   isOn: $secretsReadAfterPrompt)
+                NotificationToggle(title: NotificationWording.secretsChanged.0,
+                                   info: NotificationWording.secretsChanged.1,
+                                   isOn: $secretsChanged)
+            } header: {
+                Text("Notifications: secrets profiles")
+            } footer: {
+                Text("A profile can set its own on its page.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

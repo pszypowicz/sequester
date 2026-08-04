@@ -184,6 +184,14 @@ public enum EnclaveKeyStore {
         return metadata
     }
 
+    /// Nil follows the global notification settings.
+    @discardableResult
+    public static func setNotifications(name: String, override: KeyNotificationOverride?) throws -> KeyMetadata {
+        let metadata = try KeyStorage.mutate(name: name) { $0.notifications = override; return true }
+        Log.store.log("Set notification override of \(name, privacy: .public) to \(override != nil, privacy: .public)")
+        return metadata
+    }
+
     /// Locking is a tightening action, so it takes effect at once: any
     /// remembered tap held for this key is dropped rather than left to
     /// drain, which would keep signing for a window opened before the lock.

@@ -94,14 +94,17 @@ public protocol SigningApprover: Sendable {
 public protocol SigningNotifier: Sendable {
     /// `firstUse` marks the key's first signature for this binding chain,
     /// which the user may want to hear about even when routine signatures
-    /// are silenced.
+    /// are silenced. `overrides` carries the key's own notification
+    /// settings, since only the agent has its metadata at hand.
     func signed(keyName: String, authRequired: Bool, bindingChain: [BindingHop],
-                silent: Bool, reusedAuthorization: Bool, firstUse: Bool)
+                silent: Bool, reusedAuthorization: Bool, firstUse: Bool,
+                overrides: KeyNotificationOverride?)
     /// A request refused by policy before any prompt, so the user learns why
     /// a signature the terminal only reports as "agent refused operation" was
     /// turned down.
     func denied(keyName: String, authRequired: Bool, requester: String,
-                bindingChain: [BindingHop], reason: PolicyEngine.DenialReason)
+                bindingChain: [BindingHop], reason: PolicyEngine.DenialReason,
+                overrides: KeyNotificationOverride?)
 }
 
 /// The SSH agent protocol handler: parses one client message, produces one
@@ -201,7 +204,8 @@ public struct Agent: Sendable {
             if let reason = outcome.denialReason {
                 notifier?.denied(keyName: key.name, authRequired: key.authRequired,
                                  requester: session.provenance.displayName,
-                                 bindingChain: bindingChain, reason: reason)
+                                 bindingChain: bindingChain, reason: reason,
+                                 overrides: key.notifications)
             }
             return Response.failure
         case .allow:
@@ -254,7 +258,7 @@ public struct Agent: Sendable {
             notifier?.signed(keyName: key.name, authRequired: key.authRequired,
                              bindingChain: bindingChain, silent: silent,
                              reusedAuthorization: signed.reusedAuthorization,
-                             firstUse: firstUse)
+                             firstUse: firstUse, overrides: key.notifications)
             var payload = Data([Response.signResponse])
             payload.append(SSHWire.lengthPrefixed(OpenSSH.p256SignatureBlob(rawSignature: raw)))
             return payload

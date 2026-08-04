@@ -12,8 +12,10 @@ import SequesterCore
 struct NotificationNotifier: SigningNotifier {
 
     func signed(keyName: String, authRequired: Bool, bindingChain: [BindingHop],
-                silent: Bool, reusedAuthorization: Bool, firstUse: Bool) {
-        guard let kind = NotificationSettings.current.signedKind(silent: silent, firstUse: firstUse) else { return }
+                silent: Bool, reusedAuthorization: Bool, firstUse: Bool,
+                overrides: KeyNotificationOverride?) {
+        let preferences = NotificationSettings.current.applying(overrides)
+        guard let kind = preferences.signedKind(silent: silent, firstUse: firstUse) else { return }
         let content = UNMutableNotificationContent()
         switch kind {
         case .newDestination:
@@ -31,8 +33,9 @@ struct NotificationNotifier: SigningNotifier {
     }
 
     func denied(keyName: String, authRequired: Bool, requester: String,
-                bindingChain: [BindingHop], reason: PolicyEngine.DenialReason) {
-        guard NotificationSettings.current.allows(reason) else { return }
+                bindingChain: [BindingHop], reason: PolicyEngine.DenialReason,
+                overrides: KeyNotificationOverride?) {
+        guard NotificationSettings.current.applying(overrides).allows(reason) else { return }
         let content = UNMutableNotificationContent()
         content.title = "Signature refused"
         content.subtitle = keyLine(keyName, authRequired: authRequired)

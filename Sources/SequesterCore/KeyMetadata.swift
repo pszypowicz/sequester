@@ -123,6 +123,9 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     /// agent use "<name>@sequester", which tracks renames; a custom value
     /// (such as an email) is used verbatim.
     public var comment: String?
+    /// This key's own notification settings. Nil, the default, follows the
+    /// global ones.
+    public var notifications: KeyNotificationOverride?
     /// The public key (x9.63 uncompressed point), cached at creation so
     /// listing never has to load Enclave key handles.
     public let publicKey: Data
@@ -136,7 +139,9 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
                 destinations: [DestinationRecord] = [],
                 branchRules: [BranchRule] = [], appRules: [AppRule] = [],
                 rememberSeconds: TimeInterval = 0,
-                comment: String? = nil, publicKey: Data, createdAt: Date) {
+                comment: String? = nil,
+                notifications: KeyNotificationOverride? = nil,
+                publicKey: Data, createdAt: Date) {
         self.name = name
         self.keyDescription = keyDescription
         self.authRequired = authRequired
@@ -149,6 +154,7 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
         self.appRules = appRules
         self.rememberSeconds = rememberSeconds
         self.comment = comment
+        self.notifications = notifications
         self.publicKey = publicKey
         self.createdAt = createdAt
     }

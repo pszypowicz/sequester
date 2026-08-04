@@ -111,9 +111,13 @@ public enum ProfileChange: String, Sendable {
 /// use visible when no prompt was shown. `silent` is true when values were
 /// handed out with no user interaction at all.
 public protocol SecretsNotifier: Sendable {
+    /// `overrides` carries the profile's own notification settings, since
+    /// only the broker has its metadata at hand.
     func read(profile: String, tier: SecretTier, requester: String,
-              silent: Bool, reusedAuthorization: Bool)
-    func changed(profile: String, change: ProfileChange, requester: String)
+              silent: Bool, reusedAuthorization: Bool,
+              overrides: ProfileNotificationOverride?)
+    func changed(profile: String, change: ProfileChange, requester: String,
+                 overrides: ProfileNotificationOverride?)
 }
 
 /// The secrets protocol handler: parses one framed JSON request, applies
@@ -201,7 +205,8 @@ public struct SecretsBroker: Sendable {
             let silent = !confirmed && (metadata.tier != .everyRead || read.reusedAuthorization)
             notifier?.read(profile: name, tier: metadata.tier,
                            requester: session.requesterLabel, silent: silent,
-                           reusedAuthorization: read.reusedAuthorization)
+                           reusedAuthorization: read.reusedAuthorization,
+                           overrides: metadata.notifications)
             return SecretsResponse(ok: true, values: read.values, exportDisabled: metadata.exportDisabled)
         } catch {
             return decryptFailure(error, profile: name)
@@ -242,13 +247,15 @@ public struct SecretsBroker: Sendable {
                     name: name, setting: values,
                     reason: "update secrets profile \"\(name)\", requested by \(session.requesterLabel)"
                 )
-                notifier?.changed(profile: name, change: .updated, requester: session.requesterLabel)
+                notifier?.changed(profile: name, change: .updated, requester: session.requesterLabel,
+                                  overrides: metadata.notifications)
                 return SecretsResponse(ok: true, created: false, variables: metadata.variableNames)
             }
             let metadata = try EnclaveProfileStore.create(
                 name: name, tier: create.tier, exportDisabled: create.exportDisabled, values: values
             )
-            notifier?.changed(profile: name, change: .created, requester: session.requesterLabel)
+            notifier?.changed(profile: name, change: .created, requester: session.requesterLabel,
+                              overrides: metadata.notifications)
             return SecretsResponse(ok: true, created: true, variables: metadata.variableNames)
         } catch let error as ProfileStoreError {
             return .failure(.tooLarge, error.localizedDescription)
@@ -270,7 +277,8 @@ public struct SecretsBroker: Sendable {
         }
         do {
             try EnclaveProfileStore.delete(name: name)
-            notifier?.changed(profile: name, change: .deleted, requester: session.requesterLabel)
+            notifier?.changed(profile: name, change: .deleted, requester: session.requesterLabel,
+                              overrides: metadata.notifications)
             return SecretsResponse(ok: true)
         } catch {
             Log.secrets.error("Deleting profile \(name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")

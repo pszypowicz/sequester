@@ -12,7 +12,9 @@ import SecretsWire
 struct SecretsNotificationNotifier: SecretsNotifier {
 
     func read(profile: String, tier: SecretTier, requester: String,
-              silent: Bool, reusedAuthorization: Bool) {
+              silent: Bool, reusedAuthorization: Bool,
+              overrides: ProfileNotificationOverride?) {
+        guard NotificationSettings.current.applying(overrides).allowsSecretsRead(silent: silent) else { return }
         let content = UNMutableNotificationContent()
         content.title = reusedAuthorization ? "Secrets read with a remembered tap"
             : (silent ? "Secrets read without a prompt" : "Secrets read")
@@ -23,7 +25,9 @@ struct SecretsNotificationNotifier: SecretsNotifier {
         post(content, identifier: UUID().uuidString)
     }
 
-    func changed(profile: String, change: ProfileChange, requester: String) {
+    func changed(profile: String, change: ProfileChange, requester: String,
+                 overrides: ProfileNotificationOverride?) {
+        guard NotificationSettings.current.applying(overrides).secretsChanged else { return }
         let content = UNMutableNotificationContent()
         content.title = "Secrets profile \(change.rawValue)"
         content.subtitle = "\u{1F510} \(profile)"

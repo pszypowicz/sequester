@@ -29,12 +29,16 @@ public struct ProfileMetadata: Codable, Hashable, Sendable, Identifiable {
     public let createdAt: Date
     public var updatedAt: Date
     public var lastRead: Date?
+    /// This profile's own notification settings. Nil, the default, follows
+    /// the global ones.
+    public var notifications: ProfileNotificationOverride?
 
     public var id: String { name }
 
     public init(name: String, tier: SecretTier, variableNames: [String],
                 exportDisabled: Bool = false, rememberSeconds: TimeInterval = 0,
-                publicKey: Data, createdAt: Date, updatedAt: Date, lastRead: Date? = nil) {
+                publicKey: Data, createdAt: Date, updatedAt: Date, lastRead: Date? = nil,
+                notifications: ProfileNotificationOverride? = nil) {
         self.name = name
         self.tier = tier
         self.variableNames = variableNames
@@ -44,6 +48,7 @@ public struct ProfileMetadata: Codable, Hashable, Sendable, Identifiable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.lastRead = lastRead
+        self.notifications = notifications
     }
 
     public var summary: ProfileSummary {

@@ -61,6 +61,23 @@ struct ProfileDetailView: View {
                 sectionHeader("Variables", info: "Only the names are stored in the clear; the values live in the encrypted blob and are shown nowhere.")
             }
 
+            Section {
+                FollowGlobalToggle(followsGlobal: followsGlobalNotificationsBinding)
+                if profile.notifications != nil {
+                    NotificationToggle(title: NotificationWording.secretsReadSilently.0,
+                                       info: NotificationWording.secretsReadSilently.1,
+                                       isOn: notificationBinding(\.readSilently))
+                    NotificationToggle(title: NotificationWording.secretsReadAfterPrompt.0,
+                                       info: NotificationWording.secretsReadAfterPrompt.1,
+                                       isOn: notificationBinding(\.readAfterPrompt))
+                    NotificationToggle(title: NotificationWording.secretsChanged.0,
+                                       info: NotificationWording.secretsChanged.1,
+                                       isOn: notificationBinding(\.changed))
+                }
+            } header: {
+                sectionHeader("Notifications", info: "Which of this profile's events are announced. Turning off the global settings switch gives this profile its own copy of them to edit.")
+            }
+
             Section("Use from the terminal") {
                 CopyRow(icon: "terminal", label: "Run a command with these values",
                         value: "sequester env exec \(profile.name) -- <command>")
@@ -105,6 +122,37 @@ struct ProfileDetailView: View {
         HStack(spacing: 4) {
             Text(title)
             InfoDot(text: info)
+        }
+    }
+
+    /// Switching off takes a copy of the global settings as they stand, so
+    /// the profile starts from what it was already doing.
+    private var followsGlobalNotificationsBinding: Binding<Bool> {
+        Binding(
+            get: { profile.notifications == nil },
+            set: { follows in
+                writeNotifications(follows ? nil : NotificationSettings.current.profileOverride)
+            }
+        )
+    }
+
+    private func notificationBinding(_ field: WritableKeyPath<ProfileNotificationOverride, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { profile.notifications?[keyPath: field] ?? true },
+            set: { enabled in
+                guard var override = profile.notifications else { return }
+                override[keyPath: field] = enabled
+                writeNotifications(override)
+            }
+        )
+    }
+
+    private func writeNotifications(_ override: ProfileNotificationOverride?) {
+        do {
+            try store.setNotifications(name: profile.name, override: override)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
