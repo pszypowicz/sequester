@@ -1,6 +1,6 @@
 # Sequester
 
-> **Beta:** Sequester is pre-1.0. Backward compatibility is not guaranteed until version 1.0.0.
+> **Beta:** Sequester is pre-1.0. Backward compatibility is not guaranteed until version 1.0.0. When a release changes the storage format, its notes describe the manual cleanup required, and [docs/storage.md](docs/storage.md) documents the layout behind it.
 
 A macOS menu bar app that keeps SSH keys in the Secure Enclave and serves them to ssh through the standard agent protocol. Private keys are generated inside the Enclave and cannot be exported, so there is no key file on disk to steal. Each key's public half is written to disk so ssh config can reference it with a per-host `IdentityFile` entry.
 
@@ -67,9 +67,9 @@ Each profile chooses at creation how its reads are confirmed, and the choice is 
 
 | Confirmation                     | Behavior                                                                    | Enforced by       |
 | -------------------------------- | --------------------------------------------------------------------------- | ----------------- |
-| Touch ID on every read (default) | The Enclave refuses to decrypt without Touch ID, so every read costs a tap.  | Secure Enclave    |
-| Confirm every read               | Sequester asks in a dialog, which can waive the next five minutes.           | Sequester         |
-| No prompt                        | Reads proceed unattended, for automation that cannot answer a prompt.        | Notification only |
+| Touch ID on every read (default) | The Enclave refuses to decrypt without Touch ID, so every read costs a tap. | Secure Enclave    |
+| Confirm every read               | Sequester asks in a dialog, which can waive the next five minutes.          | Sequester         |
+| No prompt                        | Reads proceed unattended, for automation that cannot answer a prompt.       | Notification only |
 
 Any profile can also remember a confirmation for a minute or two, so a burst of commands costs one tap instead of one per command. It is off by default, locking the screen closes any open window, and changing the profile closes it too.
 
@@ -120,7 +120,7 @@ Host myserver
 - The Touch ID requirement is enforced by the Enclave's access control, independently of any app-level dialog.
 - Approval dialogs are an app-level policy layer enforced for every signature the agent performs.
 - The app runs in the App Sandbox with no network entitlement, so its file access is confined to the container and the agent process cannot phone home.
-- Key handles and metadata are stored in the login keychain.
+- Key handles and metadata are stored in the login keychain. [docs/storage.md](docs/storage.md) documents the exact layout and how to inspect or remove items from the CLI.
 - Secrets profile values are encrypted to a Secure Enclave key-agreement key, and the ciphertext lives with the key handle in a single keychain item, so a co-resident process can neither read nor swap it. The secrets protocol runs on its own socket, never on the agent socket that `ssh -A` forwards to remote hosts.
 
 ## Building
