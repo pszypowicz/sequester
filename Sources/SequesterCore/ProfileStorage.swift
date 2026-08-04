@@ -101,22 +101,40 @@ public enum ProfileStorage {
         }
     }
 
-    public static func list() throws -> [ProfileMetadata] {
+    /// Lists every item under the profile service. An item whose metadata
+    /// does not decode still reserves its name and holds a sealed blob, so
+    /// it comes back as an unreadable stub next to the decoded ones rather
+    /// than being dropped silently.
+    public static func list() throws -> (profiles: [ProfileMetadata], unreadable: [UnreadableItem]) {
         var query = baseQuery()
         query[kSecMatchLimit] = kSecMatchLimitAll
         query[kSecReturnAttributes] = true
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return [] }
+        if status == errSecItemNotFound { return ([], []) }
         guard status == errSecSuccess, let items = result as? [[CFString: Any]] else {
             throw KeychainError.status(status)
         }
         let decoder = JSONDecoder()
-        return items.compactMap { item -> ProfileMetadata? in
-            guard let generic = item[kSecAttrGeneric] as? Data else { return nil }
-            return try? decoder.decode(ProfileMetadata.self, from: generic)
+        var profiles: [ProfileMetadata] = []
+        var unreadable: [UnreadableItem] = []
+        for item in items {
+            let name = item[kSecAttrAccount] as? String ?? "(unnamed)"
+            let createdAt = item[kSecAttrCreationDate] as? Date
+            guard let generic = item[kSecAttrGeneric] as? Data else {
+                Log.secrets.error("Profile item \(name, privacy: .public) has no metadata attribute")
+                unreadable.append(UnreadableItem(name: name, createdAt: createdAt))
+                continue
+            }
+            do {
+                profiles.append(try decoder.decode(ProfileMetadata.self, from: generic))
+            } catch {
+                Log.secrets.error("Profile item \(name, privacy: .public) could not be decoded: \(error.localizedDescription, privacy: .public)")
+                unreadable.append(UnreadableItem(name: name, createdAt: createdAt))
+            }
         }
-        .sorted { $0.createdAt < $1.createdAt }
+        return (profiles.sorted { $0.createdAt < $1.createdAt },
+                unreadable.sorted { $0.name < $1.name })
     }
 
     public static func load(name: String) throws -> (value: StoredProfileValue, metadata: ProfileMetadata) {

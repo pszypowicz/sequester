@@ -12,6 +12,7 @@ import SecretsWire
 final class ProfileStore {
 
     private(set) var profiles: [ProfileMetadata] = []
+    private(set) var unreadable: [UnreadableItem] = []
 
     var enclaveAvailable: Bool { EnclaveProfileStore.isEnclaveAvailable }
 
@@ -46,7 +47,9 @@ final class ProfileStore {
     }
 
     func reload() {
-        profiles = EnclaveProfileStore.list()
+        let inventory = EnclaveProfileStore.inventory()
+        profiles = inventory.profiles
+        unreadable = inventory.unreadable
     }
 
     func create(name: String, tier: SecretTier, exportDisabled: Bool, values: [String: String]) throws {

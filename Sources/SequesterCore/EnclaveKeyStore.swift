@@ -89,7 +89,12 @@ public enum EnclaveKeyStore {
     }
 
     public static func list() -> [KeyMetadata] {
-        (try? KeyStorage.list()) ?? []
+        inventory().keys
+    }
+
+    /// The full inventory, including items this version cannot read.
+    public static func inventory() -> (keys: [KeyMetadata], unreadable: [UnreadableItem]) {
+        (try? KeyStorage.list()) ?? ([], [])
     }
 
     public static func find(publicKeyBlob: Data) -> KeyMetadata? {
@@ -295,6 +300,17 @@ public enum EnclaveKeyStore {
         Log.store.log("Deleted key \(name, privacy: .public)")
     }
 
+    /// Deletes an unreadable item by name alone. delete(name:) needs the
+    /// metadata to find the .pub file, which is exactly what an unreadable
+    /// item cannot provide; the sync afterwards prunes the orphaned file
+    /// once the inventory reads clean.
+    public static func deleteUnreadable(name: String) throws {
+        try KeyStorage.delete(name: name)
+        AuthorizationWindows.shared.invalidate(prefix: AuthorizationScope.keyPrefix(name))
+        Log.store.log("Deleted unreadable key item \(name, privacy: .public)")
+        syncPublicKeyFiles()
+    }
+
     /// Signs data the SSH way for ecdsa-sha2-nistp256: SHA-256 digest,
     /// ECDSA signature returned as raw r||s. Keys created with
     /// authRequired trigger the Enclave's own Touch ID prompt here.
@@ -363,11 +379,11 @@ public enum EnclaveKeyStore {
         // Pruning is driven by the inventory, so it must not run against a
         // partial one: a listing that failed would otherwise make every
         // public key file look stale and delete it.
-        guard let keys = try? KeyStorage.list() else {
+        guard let inventory = try? KeyStorage.list() else {
             Log.store.error("Skipping public key file sync: the key inventory could not be read")
             return
         }
-        for key in keys {
+        for key in inventory.keys {
             let line = key.publicKeyLine + "\n"
             let existing = try? String(contentsOf: key.publicKeyFileURL, encoding: .utf8)
             if existing != line {
@@ -379,7 +395,12 @@ public enum EnclaveKeyStore {
                     [.posixPermissions: 0o600], ofItemAtPath: key.publicKeyFileURL.path)
             }
         }
-        let expected = Set(keys.map { "\($0.publicKeyFileStem).pub" })
+        // An unreadable item may still own a .pub file, but its stem lives
+        // in the metadata that did not decode, so pruning cannot tell that
+        // file from a stale one. Keep every file until the inventory reads
+        // clean.
+        guard inventory.unreadable.isEmpty else { return }
+        let expected = Set(inventory.keys.map { "\($0.publicKeyFileStem).pub" })
         let contents = (try? FileManager.default.contentsOfDirectory(atPath: SequesterPaths.directory.path)) ?? []
         for file in contents where file.hasSuffix(".pub") && !expected.contains(file) {
             try? FileManager.default.removeItem(at: SequesterPaths.directory.appending(path: file))

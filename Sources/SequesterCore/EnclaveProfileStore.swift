@@ -98,7 +98,12 @@ public enum EnclaveProfileStore {
     }
 
     public static func list() -> [ProfileMetadata] {
-        (try? ProfileStorage.list()) ?? []
+        inventory().profiles
+    }
+
+    /// The full inventory, including items this version cannot read.
+    public static func inventory() -> (profiles: [ProfileMetadata], unreadable: [UnreadableItem]) {
+        (try? ProfileStorage.list()) ?? ([], [])
     }
 
     public static func find(name: String) -> ProfileMetadata? {

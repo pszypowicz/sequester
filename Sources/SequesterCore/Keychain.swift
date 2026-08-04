@@ -30,6 +30,21 @@ public enum KeychainError: LocalizedError {
     }
 }
 
+/// A keychain item whose metadata attribute does not decode, typically one
+/// written by a different version of the app. The plain attributes still
+/// identify it, so the UI can show it and offer deletion; nothing else can
+/// be done with it.
+public struct UnreadableItem: Identifiable, Equatable, Sendable {
+    public let name: String
+    public let createdAt: Date?
+    public var id: String { name }
+
+    public init(name: String, createdAt: Date?) {
+        self.name = name
+        self.createdAt = createdAt
+    }
+}
+
 /// Persistence for Secure Enclave key handles in the login keychain. Each
 /// key is one generic-password item: the account is the key name, the value
 /// is the Enclave key's dataRepresentation (an encrypted blob only this
@@ -101,35 +116,41 @@ public enum KeyStorage {
         NotificationCenter.default.post(name: .sequesterKeysDidChange, object: nil)
     }
 
-    public static func list() throws -> [KeyMetadata] {
+    /// Lists every item under the key service. An item whose metadata does
+    /// not decode is still a key - it may hold an Enclave key handle and it
+    /// reserves its name - so it comes back as an unreadable stub next to
+    /// the decoded ones instead of hiding the whole inventory behind an
+    /// error.
+    public static func list() throws -> (keys: [KeyMetadata], unreadable: [UnreadableItem]) {
         var query = baseQuery()
         query[kSecMatchLimit] = kSecMatchLimitAll
         query[kSecReturnAttributes] = true
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return [] }
+        if status == errSecItemNotFound { return ([], []) }
         guard status == errSecSuccess, let items = result as? [[CFString: Any]] else {
             throw KeychainError.status(status)
         }
         let decoder = JSONDecoder()
-        var undecodable = 0
-        let keys = items.compactMap { item -> KeyMetadata? in
-            guard let generic = item[kSecAttrGeneric] as? Data else { undecodable += 1; return nil }
+        var keys: [KeyMetadata] = []
+        var unreadable: [UnreadableItem] = []
+        for item in items {
+            let name = item[kSecAttrAccount] as? String ?? "(unnamed)"
+            let createdAt = item[kSecAttrCreationDate] as? Date
+            guard let generic = item[kSecAttrGeneric] as? Data else {
+                Log.store.error("Key item \(name, privacy: .public) has no metadata attribute")
+                unreadable.append(UnreadableItem(name: name, createdAt: createdAt))
+                continue
+            }
             do {
-                return try decoder.decode(KeyMetadata.self, from: generic)
+                keys.append(try decoder.decode(KeyMetadata.self, from: generic))
             } catch {
-                // A key that cannot be decoded is still a key: say so
-                // loudly rather than letting it disappear from the
-                // inventory without a trace.
-                undecodable += 1
-                Log.store.error("A stored key could not be decoded: \(error.localizedDescription, privacy: .public)")
-                return nil
+                Log.store.error("Key item \(name, privacy: .public) could not be decoded: \(error.localizedDescription, privacy: .public)")
+                unreadable.append(UnreadableItem(name: name, createdAt: createdAt))
             }
         }
-        if undecodable > 0 {
-            throw KeychainError.corruptItem
-        }
-        return keys.sorted { $0.createdAt < $1.createdAt }
+        return (keys.sorted { $0.createdAt < $1.createdAt },
+                unreadable.sorted { $0.name < $1.name })
     }
 
     public static func load(name: String) throws -> (dataRepresentation: Data, metadata: KeyMetadata) {
@@ -222,6 +243,15 @@ public enum AppAuthorizationStore {
 
     public static func state(for identity: String) -> AppState? {
         list().first { $0.identity == identity }?.state
+    }
+
+    /// Drops the cache so the next list() re-reads the keychain. The cache
+    /// tracks only this process's writes, so an edit made from outside the
+    /// app stays invisible until someone calls this.
+    public static func invalidateCache() {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        cache = nil
     }
 
     /// Records or updates an app's global standing and bumps its last-used

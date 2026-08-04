@@ -1,6 +1,6 @@
 # Sequester
 
-> **Beta:** Sequester is pre-1.0. Backward compatibility is not guaranteed until version 1.0.0. When a release changes the storage format, its notes describe the manual cleanup required, and [docs/storage.md](docs/storage.md) documents the layout behind it.
+> **Beta:** Sequester is pre-1.0. Backward compatibility is not guaranteed until version 1.0.0.
 
 A macOS menu bar app that keeps SSH keys in the Secure Enclave and serves them to ssh through the standard agent protocol. Private keys are generated inside the Enclave and cannot be exported, so there is no key file on disk to steal. Each key's public half is written to disk so ssh config can reference it with a per-host `IdentityFile` entry.
 

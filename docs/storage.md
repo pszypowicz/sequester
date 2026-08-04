@@ -1,6 +1,6 @@
 # Storage
 
-Sequester keeps its state in two places: credentials live in the login keychain, and the files ssh needs live in a flat directory inside the app container. Both are inspectable with standard command line tools. This page describes the exact layout, so anything the UI does can also be done or verified by hand, and so a release that changes the storage format can point here for the manual cleanup it requires.
+Sequester keeps its state in two places: credentials live in the login keychain, and the files ssh needs live in a flat directory inside the app container. Both are inspectable with standard command line tools. This page describes the exact layout, so anything the app does can also be inspected or done by hand.
 
 ## Keychain layout
 
@@ -44,7 +44,7 @@ Attributes and metadata are readable without any prompt. Reading an item's value
 security delete-generic-password -s cz.szypowi.sequester.keys -a <name>
 ```
 
-Each invocation removes one matching item and prints its attributes as it goes. Deleting a key item permanently discards the Enclave private key behind it. Restart Sequester after removing items so the inventory and the public key files settle.
+Each invocation removes one matching item and prints its attributes as it goes. Deleting a key item permanently discards the Enclave private key behind it. The app notices changes made this way when it next comes forward.
 
 ## Files on disk
 
@@ -59,10 +59,10 @@ Everything outside the keychain lives in one flat directory:
 
 The path sits inside the app container because the sandboxed app resolves its home directory there; ssh and other unsandboxed processes can follow it freely. Each `.pub` filename stem is the first 16 hex characters of the SHA-256 of the public key blob, so the file that ssh config references never moves when a key is renamed. The files carry mode 0600 because ssh refuses a group- or world-readable `IdentityFile`.
 
-On every launch the app rewrites any `.pub` file whose content drifted and deletes any `.pub` file no key claims. Pruning is skipped entirely while the key inventory cannot be fully read, so unreadable keychain items also leave their public key files in place.
+On every launch the app rewrites any `.pub` file whose content drifted and deletes any `.pub` file no key claims. Pruning is skipped while any unreadable key item exists, because such an item's filename lives in the metadata that did not decode, and its file must not be mistaken for a stale one.
 
-## Storage changes before 1.0
+## Items from other versions
 
-Sequester carries no migrations and no compatibility code for data written by earlier versions. When a release changes a storage format, items written before it stop decoding. They disappear from the app's inventory but remain in the keychain, where they keep their names reserved, so creating a credential with a previously used name reports that it already exists.
+Sequester is pre-1.0 and reads only the current storage format, with no migrations. An item written by a different version may stop decoding; it still reserves its name, and a key item may still hold an Enclave key, so it appears in the sidebar as a greyed-out unreadable entry rather than disappearing. Right-clicking the entry deletes it after the usual typed-name confirmation, and removing the last unreadable key item lets the file sync prune the `.pub` files left behind.
 
-The release notes state when a release breaks the format. The fix is the manual cleanup described above: list the leftover items, delete them, restart the app, and recreate the credentials. A recreated key is a new key pair, so its public half must replace the old one on every host and service that used it.
+The CLI commands above reach the same items, so the UI is a convenience rather than a requirement. A recreated key is a new key pair, and its public half must replace the old one on every host and service that used it.
