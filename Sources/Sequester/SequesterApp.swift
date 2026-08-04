@@ -42,9 +42,27 @@ struct SequesterApp: App {
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
 
-        MenuBarExtra("Sequester", systemImage: "key.fill", isInserted: $showMenuBarIcon) {
+        MenuBarExtra(isInserted: $showMenuBarIcon) {
             MenuContent()
+        } label: {
+            MenuBarLabel()
         }
+    }
+}
+
+/// The status item's label view is instantiated at launch - before
+/// `applicationDidFinishLaunching`, and even while the icon is hidden
+/// (`isInserted` only removes the status item, not the view) - so it is the
+/// one place an `openWindow` action exists early enough for the Dock-reopen
+/// path to open the settings window cold.
+private struct MenuBarLabel: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Label("Sequester", systemImage: "key.fill")
+            .onAppear {
+                Navigator.shared.openWindow = openWindow
+            }
     }
 }
 
