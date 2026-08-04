@@ -302,9 +302,40 @@ import CryptoKit
         #expect(allowed.denialReason == nil)
     }
 
-    private func makeLockedKey() -> KeyMetadata {
+    @Test func lockedKeyKeepsKnownDestinations() {
+        // The lock freezes the known list: a neutral record still asks (on
+        // a Touch ID key that is the Enclave prompt, and neutral is the only
+        // standing such a key can ever hold), an approved record still
+        // allows, and only a chain with no record is denied.
+        let key = makeLockedKey(destinations: [record([local], .neutral)])
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [local], appStanding: .allowed, trust: .applePlatform) == .ask)
+
+        let approved = makeLockedKey(destinations: [record([local], .approved)])
+        #expect(PolicyEngine.evaluate(key: approved, bindingChain: [local], appStanding: .allowed, trust: .applePlatform) == .allow)
+
+        let unknown = BindingHop(fingerprint: "SHA256:new", algorithm: "ssh-ed25519", forwarding: false)
+        let denied = PolicyEngine.outcome(key: key, bindingChain: [unknown],
+                                          appStanding: .allowed, trust: .applePlatform)
+        #expect(denied.decision == .deny)
+        #expect(denied.denialReason == .keyLocked)
+    }
+
+    @Test func lockedKeyOnlyNarrows() {
+        // A known chain on a locked key asks even where auto-approve would
+        // otherwise allow it silently.
+        let key = KeyMetadata(
+            name: "test", keyDescription: "", authRequired: false,
+            autoApprove: true, locked: true,
+            destinations: [record([local], .neutral)],
+            publicKey: Data(count: 65), createdAt: Date(timeIntervalSince1970: 0)
+        )
+        #expect(PolicyEngine.evaluate(key: key, bindingChain: [local], appStanding: .allowed, trust: .applePlatform) == .ask)
+    }
+
+    private func makeLockedKey(destinations: [DestinationRecord] = []) -> KeyMetadata {
         KeyMetadata(
             name: "test", keyDescription: "", authRequired: false, locked: true,
+            destinations: destinations,
             publicKey: Data(count: 65), createdAt: Date(timeIntervalSince1970: 0)
         )
     }
@@ -390,7 +421,7 @@ import CryptoKit
         #expect(PolicyEngine.evaluate(key: lockedToo, bindingChain: [github], appStanding: .allowed, trust: .applePlatform) == .allow)
     }
 
-    @Test func lockedDeniesUnapprovedButKeepsStandings() {
+    @Test func lockedDeniesUnknownButKeepsStandings() {
         let approved = makeKey(destinations: [record([github], .approved)])
         var lockedApproved = approved
         lockedApproved.locked = true

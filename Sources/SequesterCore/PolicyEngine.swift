@@ -18,10 +18,11 @@ public enum SigningDecision: Equatable, Sendable {
 /// chain, a branch rule, or block-forwarded), wins and denies. Otherwise an
 /// app that has never been authorized is asked (so the user can authorize or
 /// block it). Otherwise the destination axis decides as before - an approval
-/// (exact chain, branch rule, or approve-all) allows, a locked key denies, an
-/// unlocked key auto-approves local use if configured, everything else asks -
-/// except that an unverified requester is never signed for silently.
-/// Block-wins is the safe default for a security tool.
+/// (exact chain, branch rule, or approve-all) allows, a locked key denies
+/// chains it has no record of and asks for the ones it knows, an unlocked
+/// key auto-approves local use if configured, everything else asks - except
+/// that an unverified requester is never signed for silently. Block-wins is
+/// the safe default for a security tool.
 public enum PolicyEngine {
 
     /// Why a request was refused before any prompt, for surfacing the silent
@@ -32,7 +33,7 @@ public enum PolicyEngine {
         /// The bound path is blocked - an exact chain, a branch rule, or a
         /// blocked forwarded hop.
         case destinationBlocked
-        /// A locked key was asked to sign for a path it has not pre-approved.
+        /// A locked key was asked to sign for a chain it has no record of.
         case keyLocked
     }
 
@@ -70,7 +71,7 @@ public enum PolicyEngine {
         }
 
         // Resolve the destination axis before the app gate. A destination-level
-        // deny - a locked key facing a path it has not already approved - is
+        // deny - a locked key facing a chain it has no record of - is
         // absolute: authorizing the app must not reopen it, and a denied
         // request must not grow the destination list, so it wins over the
         // app gate's ask.
@@ -109,10 +110,15 @@ public enum PolicyEngine {
         if key.approveAll {
             return .allow
         }
-        // A locked key learns nothing new: only pre-approved paths sign,
-        // everything else is denied without asking.
+        // The lock freezes the known destination list rather than the
+        // approved set: a recorded chain keeps asking (on a Touch ID key
+        // that is the Enclave prompt), and only a chain with no record is
+        // denied without asking. Approval can never be granted on a Touch
+        // ID key, so locking to approvals alone would deny everything such
+        // a key ever signed for. The lock only narrows: a known chain asks
+        // even where auto-approve would otherwise allow it.
         if key.locked {
-            return .deny
+            return record != nil ? .ask : .deny
         }
         if key.autoApprove && !bindingChain.isEmpty && !bindingChain.contains(where: { $0.forwarding }) {
             return .allow
