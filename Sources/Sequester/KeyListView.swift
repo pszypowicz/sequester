@@ -12,7 +12,6 @@ struct KeyListView: View {
 
     @Environment(KeyStore.self) private var store
     @Environment(ProfileStore.self) private var profileStore
-    @Environment(\.openWindow) private var openWindow
     @State private var navigator = Navigator.shared
     @State private var selection: SidebarItem? = .general
     @State private var showCreate = false
@@ -177,11 +176,9 @@ struct KeyListView: View {
                 }
             }
         }
-        // Hand the window-opening action to the navigator so a notification
-        // click can reopen this window, and honor a jump requested while the
-        // window was closed (applied here) or already open (onChange).
+        // Honor a jump requested while the window was closed (applied here)
+        // or already open (onChange).
         .onAppear {
-            navigator.openWindow = openWindow
             applyPendingSelection()
         }
         .onChange(of: navigator.pendingSelection) {

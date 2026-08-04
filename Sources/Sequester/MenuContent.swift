@@ -7,9 +7,7 @@ struct MenuContent: View {
 
     var body: some View {
         Button("Settings…", systemImage: "gearshape") {
-            NSApp.setActivationPolicy(.regular)
-            openWindow(id: "main")
-            NSApp.activate(ignoringOtherApps: true)
+            Navigator.shared.showSettings()
         }
 
         Divider()

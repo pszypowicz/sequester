@@ -66,17 +66,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Launching the app while it already runs lands here; show settings
-    /// immediately. Returning true also lets SwiftUI recreate the window
-    /// when none exists (its launch presentation is suppressed).
+    /// A Dock icon click or launching the app while it already runs lands
+    /// here; show settings. The window must be opened explicitly: with its
+    /// launch presentation suppressed, neither AppKit nor SwiftUI recreates
+    /// it on reopen (SwiftUI's own reopen handling skips suppressed scenes
+    /// even when this method is not implemented).
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         Log.app.log("Reopen requested, visible windows \(hasVisibleWindows, privacy: .public)")
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.windows.first(where: { Self.isSettingsWindow($0) }) {
-            window.makeKeyAndOrderFront(nil)
+        if let window = NSApp.windows.first(where: { Self.isSettingsWindow($0) }),
+           window.isMiniaturized {
+            // Match AppKit's default reopen behavior for minimized windows.
+            NSApp.activate(ignoringOtherApps: true)
+            window.deminiaturize(nil)
+        } else {
+            Navigator.shared.showSettings()
         }
-        return true
+        return false
+    }
+
+    /// Cmd+Tab carries no reopen event, only activation. If the app presents
+    /// as a regular app (it is in the Cmd+Tab list) yet has no settings
+    /// window to show, open one. The policy guard keeps accessory-mode
+    /// activations - every approval prompt activates the app - from pulling
+    /// the settings window into view, and a minimized window counts as
+    /// showable so activation never yanks it out of the Dock.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard NSApp.activationPolicy() == .regular else { return }
+        let showable = NSApp.windows.contains {
+            Self.isSettingsWindow($0) && ($0.isVisible || $0.isMiniaturized)
+        }
+        if !showable {
+            Navigator.shared.showSettings()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

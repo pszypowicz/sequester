@@ -1,12 +1,12 @@
 import AppKit
 import SwiftUI
+import SequesterCore
 
 /// App-wide navigation for jumps that originate outside the view tree - a
-/// notification click lands in the AppKit delegate, which has no `openWindow`
-/// of its own. `KeyListView` hands its `openWindow` action here while it is
-/// on screen; since a key can only exist after the settings window has been
-/// opened to create it, that action is always captured before any signature
-/// (and so any notification) can occur.
+/// notification click or the Dock reopen event lands in the AppKit delegate,
+/// which has no `openWindow` of its own. The menu bar extra's label view
+/// captures its `openWindow` action here at launch, before any window
+/// exists, so every such jump can open the settings window cold.
 @MainActor
 @Observable
 final class Navigator {
@@ -32,10 +32,23 @@ final class Navigator {
         show(.profile(name))
     }
 
+    /// Open (or bring forward) the settings window, presenting the app as a
+    /// regular one. `openWindow` both creates the window when none exists and
+    /// fronts the existing one, so this is safe from any state. The guard
+    /// keeps the app from promoting to a Dock icon when there is nothing to
+    /// show; the action is captured at launch, so a nil here is a bug.
+    func showSettings() {
+        guard let openWindow else {
+            Log.app.error("No openWindow action captured; cannot show settings")
+            return
+        }
+        NSApp.setActivationPolicy(.regular)
+        openWindow(id: "main")
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func show(_ item: SidebarItem) {
         pendingSelection = item
-        NSApp.setActivationPolicy(.regular)
-        openWindow?(id: "main")
-        NSApp.activate(ignoringOtherApps: true)
+        showSettings()
     }
 }
