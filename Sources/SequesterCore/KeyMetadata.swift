@@ -52,6 +52,18 @@ public struct DestinationRecord: Codable, Hashable, Sendable, Identifiable {
     public var destination: BindingHop? { hops.last }
 }
 
+/// What recording an observed binding chain did to the usage log.
+public enum DestinationObservation: Equatable, Sendable {
+    /// The chain was already listed; its counter and timestamp advanced.
+    case updated
+    /// The chain was not listed and has been added as a neutral record, so
+    /// this is the key's first use of that destination.
+    case added
+    /// Nothing was recorded: the chain was unlisted and `createIfNew` was
+    /// not set, as for a request policy denied.
+    case skipped
+}
+
 /// A standing applied to every path whose binding chain starts with these hops,
 /// so a whole branch of the destination tree can be governed at once.
 public struct BranchRule: Codable, Hashable, Sendable, Identifiable {

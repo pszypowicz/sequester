@@ -199,28 +199,29 @@ public enum EnclaveKeyStore {
     /// path that is already listed, and adds a neutral record for a new one
     /// only when `createIfNew` is set. A denied request for an unknown
     /// destination passes `createIfNew: false`, so a locked key or a probe
-    /// cannot grow the destinations list. Returns whether anything was
-    /// recorded; best effort, the signing flow must not fail on bookkeeping.
+    /// cannot grow the destinations list. Best effort, the signing flow must
+    /// not fail on bookkeeping.
     @discardableResult
-    public static func recordObservation(name: String, hops: [BindingHop], createIfNew: Bool) -> Bool {
-        guard !hops.isEmpty else { return false }
-        var recorded = false
+    public static func recordObservation(name: String, hops: [BindingHop], createIfNew: Bool) -> DestinationObservation {
+        guard !hops.isEmpty else { return .skipped }
+        var observation = DestinationObservation.skipped
         _ = try? KeyStorage.mutate(name: name) { m in
             let now = Date()
             if let index = m.destinations.firstIndex(where: { $0.hops == hops }) {
                 m.destinations[index].lastUsed = now
                 m.destinations[index].count += 1
+                observation = .updated
             } else if createIfNew {
                 m.destinations.append(DestinationRecord(
                     hops: hops, state: .neutral, firstSeen: now, lastUsed: now, count: 1
                 ))
+                observation = .added
             } else {
                 return false
             }
-            recorded = true
             return true
         }
-        return recorded
+        return observation
     }
 
     public static func setDestinationState(name: String, id: String, state: DestinationState) {
