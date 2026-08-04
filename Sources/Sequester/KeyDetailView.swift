@@ -55,6 +55,32 @@ struct KeyDetailView: View {
                 .disabled(key.approveAll)
             }
 
+            Section {
+                FollowGlobalToggle(followsGlobal: followsGlobalNotificationsBinding)
+                if key.notifications != nil {
+                    NotificationToggle(title: NotificationWording.signedSilently.0,
+                                       info: NotificationWording.signedSilently.1,
+                                       isOn: notificationBinding(\.signedSilently))
+                    NotificationToggle(title: NotificationWording.signedAfterPrompt.0,
+                                       info: NotificationWording.signedAfterPrompt.1,
+                                       isOn: notificationBinding(\.signedAfterPrompt))
+                    NotificationToggle(title: NotificationWording.signedNewDestination.0,
+                                       info: NotificationWording.signedNewDestination.1,
+                                       isOn: notificationBinding(\.signedNewDestination))
+                    NotificationToggle(title: NotificationWording.refusedAppBlocked.0,
+                                       info: NotificationWording.refusedAppBlocked.1,
+                                       isOn: notificationBinding(\.refusedAppBlocked))
+                    NotificationToggle(title: NotificationWording.refusedDestinationBlocked.0,
+                                       info: NotificationWording.refusedDestinationBlocked.1,
+                                       isOn: notificationBinding(\.refusedDestinationBlocked))
+                    NotificationToggle(title: NotificationWording.refusedKeyLocked.0,
+                                       info: NotificationWording.refusedKeyLocked.1,
+                                       isOn: notificationBinding(\.refusedKeyLocked))
+                }
+            } header: {
+                sectionHeader("Notifications", info: "Which of this key's events are announced. Turning off the global settings switch gives this key its own copy of them to edit.")
+            }
+
             Section("Public key") {
                 CopyRow(icon: "doc.text", label: "Public key path", value: key.publicKeyFileURL.path, revealURL: key.publicKeyFileURL)
                 CopyRow(icon: "key", label: "Public key", value: key.publicKeyLine)
@@ -213,6 +239,38 @@ struct KeyDetailView: View {
                 }
             }
         )
+    }
+
+    /// Switching off takes a copy of the global settings as they stand, so
+    /// the key starts from what it was already doing rather than from a
+    /// blank slate.
+    private var followsGlobalNotificationsBinding: Binding<Bool> {
+        Binding(
+            get: { key.notifications == nil },
+            set: { follows in
+                write(follows ? nil : NotificationSettings.current.keyOverride)
+            }
+        )
+    }
+
+    private func notificationBinding(_ field: WritableKeyPath<KeyNotificationOverride, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { key.notifications?[keyPath: field] ?? true },
+            set: { enabled in
+                guard var override = key.notifications else { return }
+                override[keyPath: field] = enabled
+                write(override)
+            }
+        )
+    }
+
+    private func write(_ override: KeyNotificationOverride?) {
+        do {
+            try store.setNotifications(name: key.name, override: override)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private var lockedBinding: Binding<Bool> {

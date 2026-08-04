@@ -145,6 +145,14 @@ public enum EnclaveProfileStore {
         return (values, reused)
     }
 
+    /// Nil follows the global notification settings.
+    @discardableResult
+    public static func setNotifications(name: String, override: ProfileNotificationOverride?) throws -> ProfileMetadata {
+        let metadata = try ProfileStorage.mutate(name: name) { $0.notifications = override; return true }
+        Log.secrets.log("Set notification override of \(name, privacy: .public) to \(override != nil, privacy: .public)")
+        return metadata
+    }
+
     @discardableResult
     public static func setRememberSeconds(name: String, seconds: TimeInterval) throws -> ProfileMetadata {
         let metadata = try ProfileStorage.mutate(name: name) { $0.rememberSeconds = seconds; return true }

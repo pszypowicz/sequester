@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 import SequesterCore
 
 /// The first page of settings, shown when no key is selected: agent state,
@@ -6,6 +7,24 @@ import SequesterCore
 struct SetupView: View {
 
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
+    @AppStorage(NotificationSettings.Key.signedSilently)
+    private var signedSilently = NotificationSettings.Default.signedSilently
+    @AppStorage(NotificationSettings.Key.signedAfterPrompt)
+    private var signedAfterPrompt = NotificationSettings.Default.signedAfterPrompt
+    @AppStorage(NotificationSettings.Key.signedNewDestination)
+    private var signedNewDestination = NotificationSettings.Default.signedNewDestination
+    @AppStorage(NotificationSettings.Key.refusedAppBlocked)
+    private var refusedAppBlocked = NotificationSettings.Default.refusedAppBlocked
+    @AppStorage(NotificationSettings.Key.refusedDestinationBlocked)
+    private var refusedDestinationBlocked = NotificationSettings.Default.refusedDestinationBlocked
+    @AppStorage(NotificationSettings.Key.refusedKeyLocked)
+    private var refusedKeyLocked = NotificationSettings.Default.refusedKeyLocked
+    @AppStorage(NotificationSettings.Key.secretsReadSilently)
+    private var secretsReadSilently = NotificationSettings.Default.secretsReadSilently
+    @AppStorage(NotificationSettings.Key.secretsReadAfterPrompt)
+    private var secretsReadAfterPrompt = NotificationSettings.Default.secretsReadAfterPrompt
+    @State private var confirmSilentOff = false
+    @State private var systemNotificationsOff = false
     @State private var loginEnabled = LoginItem.isEnabled
     @State private var snippetFlash = CopyFlash()
 
@@ -60,6 +79,60 @@ struct SetupView: View {
                 }
             }
 
+            Section {
+                if systemNotificationsOff {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        Text("macOS is not delivering Sequester's notifications, so these settings have no effect.")
+                            .font(.caption)
+                        Button("Open System Settings") {
+                            openNotificationSettings()
+                        }
+                        .font(.caption)
+                    }
+                }
+                NotificationToggle(title: NotificationWording.signedSilently.0,
+                                   info: NotificationWording.signedSilently.1,
+                                   isOn: silentBinding)
+                NotificationToggle(title: NotificationWording.signedAfterPrompt.0,
+                                   info: NotificationWording.signedAfterPrompt.1,
+                                   isOn: $signedAfterPrompt)
+                NotificationToggle(title: NotificationWording.signedNewDestination.0,
+                                   info: NotificationWording.signedNewDestination.1,
+                                   isOn: $signedNewDestination)
+                NotificationToggle(title: NotificationWording.refusedAppBlocked.0,
+                                   info: NotificationWording.refusedAppBlocked.1,
+                                   isOn: $refusedAppBlocked)
+                NotificationToggle(title: NotificationWording.refusedDestinationBlocked.0,
+                                   info: NotificationWording.refusedDestinationBlocked.1,
+                                   isOn: $refusedDestinationBlocked)
+                NotificationToggle(title: NotificationWording.refusedKeyLocked.0,
+                                   info: NotificationWording.refusedKeyLocked.1,
+                                   isOn: $refusedKeyLocked)
+            } header: {
+                Text("Notifications: keys")
+            } footer: {
+                Text("A refused request tells the terminal only that the agent refused the operation, and a signature with no prompt shows nothing at all, so these notifications are the only account of what the agent did. A key can set its own on its page.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NotificationToggle(title: NotificationWording.secretsReadSilently.0,
+                                   info: NotificationWording.secretsReadSilently.1,
+                                   isOn: $secretsReadSilently)
+                NotificationToggle(title: NotificationWording.secretsReadAfterPrompt.0,
+                                   info: NotificationWording.secretsReadAfterPrompt.1,
+                                   isOn: $secretsReadAfterPrompt)
+            } header: {
+                Text("Notifications: secrets profiles")
+            } footer: {
+                Text("A change to a profile itself is always announced. A profile can set its own read settings on its page.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("SSH config") {
                 Text("Add this to ~/.ssh/config. Each key's public half lives next to the socket (copy the exact path from the key's page), so per-host IdentityFile entries work the same way they do with plain key files.")
                     .font(.caption)
@@ -85,13 +158,81 @@ struct SetupView: View {
             }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $confirmSilentOff) {
+            ConfirmSilentNotificationsOffSheet {
+                signedSilently = false
+            }
+        }
         .onAppear {
             loginEnabled = LoginItem.isEnabled
+            refreshNotificationAuthorization()
         }
+    }
+
+    /// Turning this one off is the only settings change that removes the
+    /// sole account of a use, so it goes through a confirmation. Turning it
+    /// back on is an ordinary write.
+    private var silentBinding: Binding<Bool> {
+        Binding(
+            get: { signedSilently },
+            set: { enabled in
+                if enabled {
+                    signedSilently = true
+                } else {
+                    confirmSilentOff = true
+                }
+            }
+        )
+    }
+
+    private func settingLabel(_ title: String, _ info: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+            InfoDot(text: info)
+        }
+    }
+
+    private func refreshNotificationAuthorization() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let delivering = settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional
+            Task { @MainActor in
+                systemNotificationsOff = !delivering
+            }
+        }
+    }
+
+    private func openNotificationSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func copyToPasteboard(_ string: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(string, forType: .string)
+    }
+}
+
+/// Spells out what is lost before the only notification for an unprompted
+/// signature is switched off.
+private struct ConfirmSilentNotificationsOffSheet: View {
+
+    @Environment(\.dismiss) private var dismiss
+    let onConfirm: () -> Void
+
+    var body: some View {
+        SheetScaffold(primaryTitle: "Turn Off", primaryRole: .destructive,
+                      size: CGSize(width: 440, height: 260),
+                      onPrimary: {
+                          onConfirm()
+                          dismiss()
+                      }) {
+            Section {
+                Text("A signature that shows no dialog and no Touch ID prompt leaves no other trace on screen. With this off, an approved app signing with an approved key does so with nothing to see, and the only record is the log.")
+                    .font(.callout)
+            } header: {
+                Text("Stop announcing signatures that show no prompt?")
+            }
+        }
     }
 }

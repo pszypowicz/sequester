@@ -91,6 +91,11 @@ final class KeyStore {
         reload()
     }
 
+    func setNotifications(name: String, override: KeyNotificationOverride?) throws {
+        try EnclaveKeyStore.setNotifications(name: name, override: override)
+        reload()
+    }
+
     func setLocked(name: String, locked: Bool) throws {
         try EnclaveKeyStore.setLocked(name: name, locked: locked)
         reload()

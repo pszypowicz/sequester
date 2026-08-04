@@ -67,6 +67,11 @@ final class ProfileStore {
         reload()
     }
 
+    func setNotifications(name: String, override: ProfileNotificationOverride?) throws {
+        try EnclaveProfileStore.setNotifications(name: name, override: override)
+        reload()
+    }
+
     func setExportDisabled(name: String, disabled: Bool) throws {
         try EnclaveProfileStore.setExportDisabled(name: name, disabled: disabled)
         reload()

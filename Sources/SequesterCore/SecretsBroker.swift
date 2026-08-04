@@ -111,8 +111,13 @@ public enum ProfileChange: String, Sendable {
 /// use visible when no prompt was shown. `silent` is true when values were
 /// handed out with no user interaction at all.
 public protocol SecretsNotifier: Sendable {
+    /// `overrides` carries the profile's own notification settings, since
+    /// only the broker has its metadata at hand.
     func read(profile: String, tier: SecretTier, requester: String,
-              silent: Bool, reusedAuthorization: Bool)
+              silent: Bool, reusedAuthorization: Bool,
+              overrides: ProfileNotificationOverride?)
+    /// Always announced: a profile only changes through a request the user
+    /// approved, so the notification is the receipt for it.
     func changed(profile: String, change: ProfileChange, requester: String)
 }
 
@@ -201,7 +206,8 @@ public struct SecretsBroker: Sendable {
             let silent = !confirmed && (metadata.tier != .everyRead || read.reusedAuthorization)
             notifier?.read(profile: name, tier: metadata.tier,
                            requester: session.requesterLabel, silent: silent,
-                           reusedAuthorization: read.reusedAuthorization)
+                           reusedAuthorization: read.reusedAuthorization,
+                           overrides: metadata.notifications)
             return SecretsResponse(ok: true, values: read.values, exportDisabled: metadata.exportDisabled)
         } catch {
             return decryptFailure(error, profile: name)
