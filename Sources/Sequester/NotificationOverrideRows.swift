@@ -70,8 +70,4 @@ enum NotificationWording {
         "Read after a prompt",
         "A profile read you just confirmed at a dialog or a Touch ID prompt."
     )
-    static let secretsChanged = (
-        "Profile created, updated, or deleted",
-        "A change to the profile itself rather than a read of its values."
-    )
 }

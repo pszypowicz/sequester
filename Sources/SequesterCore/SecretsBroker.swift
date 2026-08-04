@@ -116,8 +116,9 @@ public protocol SecretsNotifier: Sendable {
     func read(profile: String, tier: SecretTier, requester: String,
               silent: Bool, reusedAuthorization: Bool,
               overrides: ProfileNotificationOverride?)
-    func changed(profile: String, change: ProfileChange, requester: String,
-                 overrides: ProfileNotificationOverride?)
+    /// Always announced: a profile only changes through a request the user
+    /// approved, so the notification is the receipt for it.
+    func changed(profile: String, change: ProfileChange, requester: String)
 }
 
 /// The secrets protocol handler: parses one framed JSON request, applies
@@ -247,15 +248,13 @@ public struct SecretsBroker: Sendable {
                     name: name, setting: values,
                     reason: "update secrets profile \"\(name)\", requested by \(session.requesterLabel)"
                 )
-                notifier?.changed(profile: name, change: .updated, requester: session.requesterLabel,
-                                  overrides: metadata.notifications)
+                notifier?.changed(profile: name, change: .updated, requester: session.requesterLabel)
                 return SecretsResponse(ok: true, created: false, variables: metadata.variableNames)
             }
             let metadata = try EnclaveProfileStore.create(
                 name: name, tier: create.tier, exportDisabled: create.exportDisabled, values: values
             )
-            notifier?.changed(profile: name, change: .created, requester: session.requesterLabel,
-                              overrides: metadata.notifications)
+            notifier?.changed(profile: name, change: .created, requester: session.requesterLabel)
             return SecretsResponse(ok: true, created: true, variables: metadata.variableNames)
         } catch let error as ProfileStoreError {
             return .failure(.tooLarge, error.localizedDescription)
@@ -277,8 +276,7 @@ public struct SecretsBroker: Sendable {
         }
         do {
             try EnclaveProfileStore.delete(name: name)
-            notifier?.changed(profile: name, change: .deleted, requester: session.requesterLabel,
-                              overrides: metadata.notifications)
+            notifier?.changed(profile: name, change: .deleted, requester: session.requesterLabel)
             return SecretsResponse(ok: true)
         } catch {
             Log.secrets.error("Deleting profile \(name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")

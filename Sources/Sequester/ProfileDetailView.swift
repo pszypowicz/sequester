@@ -70,9 +70,6 @@ struct ProfileDetailView: View {
                     NotificationToggle(title: NotificationWording.secretsReadAfterPrompt.0,
                                        info: NotificationWording.secretsReadAfterPrompt.1,
                                        isOn: notificationBinding(\.readAfterPrompt))
-                    NotificationToggle(title: NotificationWording.secretsChanged.0,
-                                       info: NotificationWording.secretsChanged.1,
-                                       isOn: notificationBinding(\.changed))
                 }
             } header: {
                 sectionHeader("Notifications", info: "Which of this profile's events are announced. Turning off the global settings switch gives this profile its own copy of them to edit.")

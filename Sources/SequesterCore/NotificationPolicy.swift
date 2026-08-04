@@ -23,8 +23,6 @@ public struct NotificationPreferences: Equatable, Sendable {
     /// none or because a remembered tap covered it.
     public var secretsReadSilently: Bool
     public var secretsReadAfterPrompt: Bool
-    /// A profile created, updated, or deleted.
-    public var secretsChanged: Bool
 
     public init(signedSilently: Bool = true,
                 signedAfterPrompt: Bool = false,
@@ -33,8 +31,7 @@ public struct NotificationPreferences: Equatable, Sendable {
                 refusedDestinationBlocked: Bool = true,
                 refusedKeyLocked: Bool = true,
                 secretsReadSilently: Bool = true,
-                secretsReadAfterPrompt: Bool = false,
-                secretsChanged: Bool = true) {
+                secretsReadAfterPrompt: Bool = false) {
         self.signedSilently = signedSilently
         self.signedAfterPrompt = signedAfterPrompt
         self.signedNewDestination = signedNewDestination
@@ -43,7 +40,6 @@ public struct NotificationPreferences: Equatable, Sendable {
         self.refusedKeyLocked = refusedKeyLocked
         self.secretsReadSilently = secretsReadSilently
         self.secretsReadAfterPrompt = secretsReadAfterPrompt
-        self.secretsChanged = secretsChanged
     }
 
     /// What a signature notification should announce, or nil when the user
@@ -95,7 +91,6 @@ public struct NotificationPreferences: Equatable, Sendable {
         var resolved = self
         resolved.secretsReadSilently = override.readSilently
         resolved.secretsReadAfterPrompt = override.readAfterPrompt
-        resolved.secretsChanged = override.changed
         return resolved
     }
 
@@ -113,8 +108,7 @@ public struct NotificationPreferences: Equatable, Sendable {
     /// moves it off the global settings.
     public var profileOverride: ProfileNotificationOverride {
         ProfileNotificationOverride(
-            readSilently: secretsReadSilently, readAfterPrompt: secretsReadAfterPrompt,
-            changed: secretsChanged
+            readSilently: secretsReadSilently, readAfterPrompt: secretsReadAfterPrompt
         )
     }
 }
@@ -145,12 +139,10 @@ public struct KeyNotificationOverride: Codable, Hashable, Sendable {
 public struct ProfileNotificationOverride: Codable, Hashable, Sendable {
     public var readSilently: Bool
     public var readAfterPrompt: Bool
-    public var changed: Bool
 
-    public init(readSilently: Bool, readAfterPrompt: Bool, changed: Bool) {
+    public init(readSilently: Bool, readAfterPrompt: Bool) {
         self.readSilently = readSilently
         self.readAfterPrompt = readAfterPrompt
-        self.changed = changed
     }
 }
 

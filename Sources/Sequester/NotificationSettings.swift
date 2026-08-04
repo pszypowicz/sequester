@@ -16,7 +16,6 @@ enum NotificationSettings {
         static let refusedKeyLocked = "notifyRefusedKeyLocked"
         static let secretsReadSilently = "notifySecretsReadSilently"
         static let secretsReadAfterPrompt = "notifySecretsReadAfterPrompt"
-        static let secretsChanged = "notifySecretsChanged"
     }
 
     /// A signature the user just approved repeats a prompt they answered
@@ -31,7 +30,6 @@ enum NotificationSettings {
         static let refusedKeyLocked = true
         static let secretsReadSilently = true
         static let secretsReadAfterPrompt = false
-        static let secretsChanged = true
     }
 
     static var current: NotificationPreferences {
@@ -44,8 +42,7 @@ enum NotificationSettings {
             refusedDestinationBlocked: defaults.bool(Key.refusedDestinationBlocked, default: Default.refusedDestinationBlocked),
             refusedKeyLocked: defaults.bool(Key.refusedKeyLocked, default: Default.refusedKeyLocked),
             secretsReadSilently: defaults.bool(Key.secretsReadSilently, default: Default.secretsReadSilently),
-            secretsReadAfterPrompt: defaults.bool(Key.secretsReadAfterPrompt, default: Default.secretsReadAfterPrompt),
-            secretsChanged: defaults.bool(Key.secretsChanged, default: Default.secretsChanged)
+            secretsReadAfterPrompt: defaults.bool(Key.secretsReadAfterPrompt, default: Default.secretsReadAfterPrompt)
         )
     }
 }

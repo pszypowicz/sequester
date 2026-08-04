@@ -56,20 +56,18 @@ import Foundation
         #expect(resolved.signedKind(silent: true, firstUse: true) == nil)
         #expect(!resolved.allows(.keyLocked))
         #expect(resolved.allowsSecretsRead(silent: true))
-        #expect(resolved.secretsChanged)
     }
 
     @Test func profileOverrideReplacesOnlyItsOwnClasses() {
-        let global = NotificationPreferences(signedSilently: true, secretsReadSilently: true, secretsChanged: true)
-        let quietProfile = ProfileNotificationOverride(readSilently: false, readAfterPrompt: false, changed: false)
+        let global = NotificationPreferences(signedSilently: true, secretsReadSilently: true)
+        let quietProfile = ProfileNotificationOverride(readSilently: false, readAfterPrompt: false)
         let resolved = global.applying(quietProfile)
         #expect(!resolved.allowsSecretsRead(silent: true))
-        #expect(!resolved.secretsChanged)
         #expect(resolved.signedKind(silent: true, firstUse: false) == .silent)
     }
 
     @Test func absentOverrideLeavesTheGlobalSettings() {
-        let global = NotificationPreferences(signedSilently: false, secretsChanged: false)
+        let global = NotificationPreferences(signedSilently: false, secretsReadSilently: false)
         #expect(global.applying(nil as KeyNotificationOverride?) == global)
         #expect(global.applying(nil as ProfileNotificationOverride?) == global)
     }
@@ -119,7 +117,7 @@ import Foundation
                                       publicKey: Data(count: 65),
                                       createdAt: Date(timeIntervalSince1970: 0),
                                       updatedAt: Date(timeIntervalSince1970: 0))
-        profile.notifications = ProfileNotificationOverride(readSilently: false, readAfterPrompt: true, changed: false)
+        profile.notifications = ProfileNotificationOverride(readSilently: false, readAfterPrompt: true)
         let decodedProfile = try JSONDecoder().decode(ProfileMetadata.self, from: JSONEncoder().encode(profile))
         #expect(decodedProfile.notifications == profile.notifications)
     }

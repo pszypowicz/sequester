@@ -23,8 +23,6 @@ struct SetupView: View {
     private var secretsReadSilently = NotificationSettings.Default.secretsReadSilently
     @AppStorage(NotificationSettings.Key.secretsReadAfterPrompt)
     private var secretsReadAfterPrompt = NotificationSettings.Default.secretsReadAfterPrompt
-    @AppStorage(NotificationSettings.Key.secretsChanged)
-    private var secretsChanged = NotificationSettings.Default.secretsChanged
     @State private var confirmSilentOff = false
     @State private var systemNotificationsOff = false
     @State private var loginEnabled = LoginItem.isEnabled
@@ -127,13 +125,10 @@ struct SetupView: View {
                 NotificationToggle(title: NotificationWording.secretsReadAfterPrompt.0,
                                    info: NotificationWording.secretsReadAfterPrompt.1,
                                    isOn: $secretsReadAfterPrompt)
-                NotificationToggle(title: NotificationWording.secretsChanged.0,
-                                   info: NotificationWording.secretsChanged.1,
-                                   isOn: $secretsChanged)
             } header: {
                 Text("Notifications: secrets profiles")
             } footer: {
-                Text("A profile can set its own on its page.")
+                Text("A change to a profile itself is always announced. A profile can set its own read settings on its page.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

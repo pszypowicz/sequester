@@ -25,9 +25,7 @@ struct SecretsNotificationNotifier: SecretsNotifier {
         post(content, identifier: UUID().uuidString)
     }
 
-    func changed(profile: String, change: ProfileChange, requester: String,
-                 overrides: ProfileNotificationOverride?) {
-        guard NotificationSettings.current.applying(overrides).secretsChanged else { return }
+    func changed(profile: String, change: ProfileChange, requester: String) {
         let content = UNMutableNotificationContent()
         content.title = "Secrets profile \(change.rawValue)"
         content.subtitle = "\u{1F510} \(profile)"
