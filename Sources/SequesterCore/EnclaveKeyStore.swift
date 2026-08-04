@@ -184,9 +184,13 @@ public enum EnclaveKeyStore {
         return metadata
     }
 
+    /// Locking is a tightening action, so it takes effect at once: any
+    /// remembered tap held for this key is dropped rather than left to
+    /// drain, which would keep signing for a window opened before the lock.
     @discardableResult
     public static func setLocked(name: String, locked: Bool) throws -> KeyMetadata {
         let metadata = try KeyStorage.mutate(name: name) { $0.locked = locked; return true }
+        AuthorizationWindows.shared.invalidate(prefix: AuthorizationScope.keyPrefix(name))
         Log.store.log("Set locked of \(name, privacy: .public) to \(locked, privacy: .public)")
         return metadata
     }

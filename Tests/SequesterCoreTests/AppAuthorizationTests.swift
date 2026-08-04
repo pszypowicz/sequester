@@ -104,7 +104,7 @@ import Foundation
     @Test func lockedKeyDeniesNewDestinationRegardlessOfApp() {
         var locked = key()
         locked.locked = true
-        // A locked key facing an unapproved destination denies; authorizing
+        // A locked key facing a chain it has no record of denies; authorizing
         // the app must not reopen it, so an unknown app is denied, not asked.
         #expect(PolicyEngine.evaluate(key: locked, bindingChain: [local],
                                       appStanding: .unknown, trust: .applePlatform) == .deny)

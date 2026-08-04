@@ -50,7 +50,7 @@ struct KeyDetailView: View {
                 .disabled(key.approveAll)
                 Toggle(isOn: lockedBinding) {
                     settingLabel("Lock to current destinations",
-                                 "Signs only for destinations you have already approved; everything else is denied without asking. Turn off to allow new destinations again.")
+                                 "Denies any destination not in the list, without asking. Destinations already in the list keep working as they do now, and you can still change their standing here or approve one from its prompt. Turn off to allow new destinations again.")
                 }
                 .disabled(key.approveAll)
             }

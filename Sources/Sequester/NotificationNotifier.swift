@@ -36,8 +36,8 @@ struct NotificationNotifier: SigningNotifier {
         case .destinationBlocked:
             content.body = "\u{1F6AB} Destination blocked: \(destination ?? "unknown")"
         case .keyLocked:
-            content.body = destination.map { "\u{1F512} Key locked; \($0) is not approved" }
-                ?? "\u{1F512} Key locked; destination not approved"
+            content.body = destination.map { "\u{1F512} Key locked; \($0) is not a known destination" }
+                ?? "\u{1F512} Key locked; destination not known"
         }
         content.userInfo = ["keyName": keyName]
 

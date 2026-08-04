@@ -91,8 +91,9 @@ public struct KeyMetadata: Codable, Hashable, Sendable, Identifiable {
     /// for keys without the Touch ID requirement, whose Enclave prompt
     /// cannot be skipped.
     public var autoApprove: Bool
-    /// Finalizes the key to its current standings: nothing new is learned
-    /// or asked, so any destination that is not already approved is denied.
+    /// Finalizes the key to the destinations it already knows: a recorded
+    /// chain keeps its standing, and any chain with no record is denied
+    /// without asking, so nothing new is learned.
     public var locked: Bool
     /// Observed signing paths with their standing.
     public var destinations: [DestinationRecord]
