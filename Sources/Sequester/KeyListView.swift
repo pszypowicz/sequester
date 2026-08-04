@@ -20,6 +20,7 @@ struct KeyListView: View {
     @State private var showCreateProfile = false
     @State private var editProfileCandidate: ProfileMetadata?
     @State private var deleteProfileCandidate: ProfileMetadata?
+    @State private var deleteUnreadableCandidate: UnreadableCandidate?
 
     /// Titlebar text that names the section the user is in, so the window
     /// tells you where you are the same way the sidebar does.
@@ -45,7 +46,7 @@ struct KeyListView: View {
                     .tag(SidebarItem.apps)
 
                 Section("Keys") {
-                    if store.keys.isEmpty {
+                    if store.keys.isEmpty && store.unreadable.isEmpty {
                         Text("No keys yet")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -72,10 +73,18 @@ struct KeyListView: View {
                             }
                         }
                     }
+                    ForEach(store.unreadable) { item in
+                        UnreadableRow(name: item.name)
+                            .contextMenu {
+                                Button("Delete \"\(item.name)\"…", role: .destructive) {
+                                    deleteUnreadableCandidate = UnreadableCandidate(kind: .key, name: item.name)
+                                }
+                            }
+                    }
                 }
 
                 Section("Secrets Profiles") {
-                    if profileStore.profiles.isEmpty {
+                    if profileStore.profiles.isEmpty && profileStore.unreadable.isEmpty {
                         Text("No profiles yet")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -91,6 +100,14 @@ struct KeyListView: View {
                                 Divider()
                                 Button("Delete \"\(profile.name)\"…", role: .destructive) {
                                     deleteProfileCandidate = profile
+                                }
+                            }
+                    }
+                    ForEach(profileStore.unreadable) { item in
+                        UnreadableRow(name: item.name)
+                            .contextMenu {
+                                Button("Delete \"\(item.name)\"…", role: .destructive) {
+                                    deleteUnreadableCandidate = UnreadableCandidate(kind: .profile, name: item.name)
                                 }
                             }
                     }
@@ -169,6 +186,9 @@ struct KeyListView: View {
                 }
             }
         }
+        .sheet(item: $deleteUnreadableCandidate) { candidate in
+            DeleteUnreadableSheet(candidate: candidate)
+        }
         .sheet(item: $deleteProfileCandidate) { profile in
             DeleteProfileSheet(profile: profile) {
                 if selection == .profile(profile.name) {
@@ -198,5 +218,24 @@ struct KeyListView: View {
         case .confirmEveryRead: "lock.shield"
         case .noPrompt: "lock.open"
         }
+    }
+}
+
+/// Sidebar row for a keychain item this version cannot read. It has no page
+/// to open, so it stays unselectable; the context menu offers deletion.
+private struct UnreadableRow: View {
+    let name: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(name, systemImage: "exclamationmark.triangle")
+            Text("Unreadable")
+                .font(.caption)
+                .lineLimit(1)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.vertical, 2)
+        .selectionDisabled()
+        .help("Stored by a different version of Sequester and cannot be read. Right-click to delete it.")
     }
 }

@@ -11,6 +11,7 @@ import SequesterCore
 final class KeyStore {
 
     private(set) var keys: [KeyMetadata] = []
+    private(set) var unreadable: [UnreadableItem] = []
 
     var enclaveAvailable: Bool { EnclaveKeyStore.isEnclaveAvailable }
 
@@ -45,7 +46,9 @@ final class KeyStore {
     }
 
     func reload() {
-        keys = EnclaveKeyStore.list()
+        let inventory = EnclaveKeyStore.inventory()
+        keys = inventory.keys
+        unreadable = inventory.unreadable
     }
 
     func create(name: String, description: String, authRequired: Bool, comment: String?) throws {
@@ -125,6 +128,11 @@ final class KeyStore {
 
     func delete(name: String) throws {
         try EnclaveKeyStore.delete(name: name)
+        reload()
+    }
+
+    func deleteUnreadable(name: String) throws {
+        try EnclaveKeyStore.deleteUnreadable(name: name)
         reload()
     }
 }

@@ -20,14 +20,17 @@ final class AppAuthStore {
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.reload() }
             },
-            // The change notification is in-process, so a second
-            // instance run from a terminal can edit the keychain
-            // without this one hearing it. Refresh whenever the app
-            // comes forward, which is when a stale list would show.
+            // The change notification is in-process, so an edit made from a
+            // terminal never reaches it. Refresh whenever the app comes
+            // forward, which is when a stale list would show; the cache must
+            // go first or list() would just serve the stale copy back.
             NotificationCenter.default.addObserver(
                 forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
             ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.reload() }
+                MainActor.assumeIsolated {
+                    AppAuthorizationStore.invalidateCache()
+                    self?.reload()
+                }
             },
         ]
     }
