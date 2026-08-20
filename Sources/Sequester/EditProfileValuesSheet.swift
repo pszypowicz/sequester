@@ -1,5 +1,6 @@
 import SwiftUI
 import SequesterCore
+import SecretsWire
 
 /// Edits a profile's values: existing variables can get a new value or be
 /// removed, and new variables can be added. Values are write-only here; the
@@ -34,12 +35,25 @@ struct EditProfileValuesSheet: View {
 
     private var hasChange: Bool {
         existing.contains { $0.removed || !$0.value.isEmpty }
-            || added.contains { !$0.name.isEmpty || !$0.value.isEmpty }
+            || added.contains { !CheckedName.trimmed($0.name).isEmpty || !$0.value.isEmpty }
+    }
+
+    /// The first new variable name that breaks the rule, so a bad one is
+    /// named as it is typed rather than when the sheet submits.
+    private var variableMessage: String? {
+        for entry in added {
+            if let message = CheckedName(entry.name, rule: EnvName.validate).message {
+                return message
+            }
+        }
+        return nil
     }
 
     var body: some View {
-        SheetScaffold(primaryTitle: "Save", primaryDisabled: !hasChange,
-                      error: errorMessage, size: CGSize(width: 480, height: 440),
+        SheetScaffold(primaryTitle: "Save",
+                      primaryDisabled: !hasChange || variableMessage != nil,
+                      error: variableMessage ?? errorMessage,
+                      size: CGSize(width: 480, height: 440),
                       onPrimary: save) {
             Section {
                 VariableColumnHeader()
@@ -107,16 +121,20 @@ struct EditProfileValuesSheet: View {
                 setting[entry.id] = entry.value
             }
         }
-        for entry in added where !entry.name.isEmpty || !entry.value.isEmpty {
-            guard !entry.name.isEmpty, !entry.value.isEmpty else {
+        // Only the name is trimmed. A value is a secret, and stripping a
+        // character the token really carries would break it silently.
+        for entry in added {
+            let variable = CheckedName.trimmed(entry.name)
+            guard !variable.isEmpty || !entry.value.isEmpty else { continue }
+            guard !variable.isEmpty, !entry.value.isEmpty else {
                 errorMessage = "Every new variable needs a name and a value."
                 return
             }
-            guard setting[entry.name] == nil else {
-                errorMessage = "Variable \(entry.name) is listed twice."
+            guard setting[variable] == nil else {
+                errorMessage = "Variable \(variable) is listed twice."
                 return
             }
-            setting[entry.name] = entry.value
+            setting[variable] = entry.value
         }
         do {
             try store.updateValues(name: profile.name, setting: setting, removing: removing)

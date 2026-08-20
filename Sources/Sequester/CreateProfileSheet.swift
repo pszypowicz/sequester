@@ -19,13 +19,30 @@ struct CreateProfileSheet: View {
         var value = ""
     }
 
+    private var checkedName: CheckedName {
+        CheckedName(name, rule: ProfileName.validate)
+    }
+
+    /// The first variable name that breaks the rule, so a bad one is named
+    /// as it is typed rather than when the sheet submits.
+    private var variableMessage: String? {
+        for entry in entries {
+            if let message = CheckedName(entry.name, rule: EnvName.validate).message {
+                return message
+            }
+        }
+        return nil
+    }
+
     private var hasVariable: Bool {
-        entries.contains { !$0.name.isEmpty && !$0.value.isEmpty }
+        entries.contains { !CheckedName.trimmed($0.name).isEmpty && !$0.value.isEmpty }
     }
 
     var body: some View {
-        SheetScaffold(primaryTitle: "Create", primaryDisabled: name.isEmpty || !hasVariable,
-                      error: errorMessage, size: CGSize(width: 480, height: 520),
+        SheetScaffold(primaryTitle: "Create",
+                      primaryDisabled: !checkedName.isUsable || variableMessage != nil || !hasVariable,
+                      error: checkedName.message ?? variableMessage ?? errorMessage,
+                      size: CGSize(width: 480, height: 520),
                       onPrimary: create) {
             Section {
                 TextField("Name", text: $name, prompt: Text("e.g. deploy"))
@@ -75,19 +92,24 @@ struct CreateProfileSheet: View {
 
     private func create() {
         var values: [String: String] = [:]
-        for entry in entries where !entry.name.isEmpty || !entry.value.isEmpty {
-            guard !entry.name.isEmpty, !entry.value.isEmpty else {
+        // Only the name is trimmed. A value is a secret, and stripping a
+        // character the token really carries would break it silently.
+        for entry in entries {
+            let variable = CheckedName.trimmed(entry.name)
+            guard !variable.isEmpty || !entry.value.isEmpty else { continue }
+            guard !variable.isEmpty, !entry.value.isEmpty else {
                 errorMessage = "Every variable needs a name and a value."
                 return
             }
-            guard values[entry.name] == nil else {
-                errorMessage = "Variable \(entry.name) is listed twice."
+            guard values[variable] == nil else {
+                errorMessage = "Variable \(variable) is listed twice."
                 return
             }
-            values[entry.name] = entry.value
+            values[variable] = entry.value
         }
         do {
-            try store.create(name: name, tier: tier, exportDisabled: exportDisabled, values: values)
+            try store.create(name: checkedName.value, tier: tier, exportDisabled: exportDisabled,
+                             values: values)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

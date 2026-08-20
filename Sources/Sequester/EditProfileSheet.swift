@@ -20,9 +20,14 @@ struct EditProfileSheet: View {
         _name = State(initialValue: profile.name)
     }
 
+    private var checkedName: CheckedName {
+        CheckedName(name, rule: ProfileName.validate)
+    }
+
     var body: some View {
-        SheetScaffold(primaryTitle: "Save", primaryDisabled: name.isEmpty,
-                      error: errorMessage, size: CGSize(width: 420, height: 200),
+        SheetScaffold(primaryTitle: "Save", primaryDisabled: !checkedName.isUsable,
+                      error: checkedName.message ?? errorMessage,
+                      size: CGSize(width: 420, height: 200),
                       onPrimary: save) {
             Section {
                 TextField("Name", text: $name)
@@ -35,10 +40,11 @@ struct EditProfileSheet: View {
     }
 
     private func save() {
+        let newName = checkedName.value
         do {
-            if name != profile.name {
-                try store.rename(name: profile.name, to: name)
-                onRename(name)
+            if newName != profile.name {
+                try store.rename(name: profile.name, to: newName)
+                onRename(newName)
             }
             dismiss()
         } catch {
