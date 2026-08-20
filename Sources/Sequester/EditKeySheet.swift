@@ -24,15 +24,20 @@ struct EditKeySheet: View {
         _comment = State(initialValue: key.comment ?? "")
     }
 
+    private var checkedName: CheckedName {
+        CheckedName(name, rule: KeyName.validate)
+    }
+
     var body: some View {
-        SheetScaffold(primaryTitle: "Save", primaryDisabled: name.isEmpty,
-                      error: errorMessage, size: CGSize(width: 420, height: 260),
+        SheetScaffold(primaryTitle: "Save", primaryDisabled: !checkedName.isUsable,
+                      error: checkedName.message ?? errorMessage,
+                      size: CGSize(width: 420, height: 260),
                       onPrimary: save) {
             Section {
                 TextField("Name", text: $name)
                 TextField("Description", text: $keyDescription, prompt: Text("optional"))
                 TextField("Comment", text: $comment,
-                          prompt: Text("\(name.isEmpty ? "name" : name)@sequester"))
+                          prompt: Text("\(checkedName.value.isEmpty ? "name" : checkedName.value)@sequester"))
             } footer: {
                 Text("The public key comment defaults to name@sequester.")
                     .font(.caption)
@@ -42,16 +47,21 @@ struct EditKeySheet: View {
     }
 
     private func save() {
+        let newName = checkedName.value
+        // The comment becomes the tail of the public key line, where a
+        // trailing space is as invisible as it is in the field.
+        let trimmedComment = CheckedName.trimmed(comment)
         do {
-            if name != key.name {
-                try store.rename(name: key.name, to: name)
-                onRename(name)
+            if newName != key.name {
+                try store.rename(name: key.name, to: newName)
+                onRename(newName)
             }
             if keyDescription != key.keyDescription {
-                try store.setDescription(name: name, description: keyDescription)
+                try store.setDescription(name: newName, description: keyDescription)
             }
-            if comment != (key.comment ?? "") {
-                try store.setComment(name: name, comment: comment.isEmpty ? nil : comment)
+            if trimmedComment != (key.comment ?? "") {
+                try store.setComment(name: newName,
+                                     comment: trimmedComment.isEmpty ? nil : trimmedComment)
             }
             dismiss()
         } catch {
