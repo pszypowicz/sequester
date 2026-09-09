@@ -45,6 +45,16 @@ public enum OpenSSH {
         return "SHA256:\(b64)"
     }
 
+    /// A fingerprint cut down for a one-line display: the hash prefix, the
+    /// first `hashCharacters` of the hash, and an ellipsis. A value without a
+    /// colon, or with a hash that already fits, is returned unchanged.
+    public static func abbreviatedFingerprint(_ fingerprint: String, hashCharacters: Int = 20) -> String {
+        guard let colon = fingerprint.firstIndex(of: ":") else { return fingerprint }
+        let hash = fingerprint[fingerprint.index(after: colon)...]
+        guard hash.count > hashCharacters else { return fingerprint }
+        return fingerprint[...colon] + hash.prefix(hashCharacters) + "\u{2026}"
+    }
+
     /// The legacy OpenSSH fingerprint: colon-separated MD5 hex pairs, as
     /// shown by `ssh-keygen -l -E md5`. Old servers and UIs still display
     /// this format, so it is offered for comparison only.

@@ -53,7 +53,7 @@ Each key records the destination hosts it is asked to sign for, keyed by the exa
 
 Per-key settings shape the defaults for chains without an explicit standing. **Approve all requests without asking** signs everything except blocked destinations. **Approve local requests without asking** signs only non-forwarded chains. **Block forwarded requests** denies anything that arrives through a forwarding hop. **Lock to current destinations** keeps the destinations already on the list working as they do and denies any destination not on it, without asking, so a key can be finalized to exactly the hosts it is for. The approve settings are offered only for keys without Touch ID, since the Enclave prompt cannot be skipped, and blocks always win over approvals.
 
-A key with the Touch ID requirement can remember a tap for a short window, so several git operations in a row cost one tap. It is off by default and scoped tightly: a window covers one key reaching one destination over one exact path, so a tap for a host says nothing about the same host reached another way, and no window is ever opened for a request that arrived through a forwarding hop, where the Touch ID prompt is the last human gate. Locking the screen closes every open window.
+A key with the Touch ID requirement can remember a tap for a window of up to an hour, so several git operations in a row cost one tap. It is off by default and scoped tightly: a window covers one key reaching one destination over one exact path, so a tap for a host says nothing about the same host reached another way, and no window is ever opened for a request that arrived through a forwarding hop, where the Touch ID prompt is the last human gate. Locking the screen closes every open window.
 
 Each binding's signature is verified against its host key, and a silent signature additionally requires the request's own session identifier to match the destination binding. Unknown and unbound chains always ask, and a denied request for a host the key has never signed for is logged rather than added to the destinations, so a probe cannot grow the list.
 
@@ -68,10 +68,10 @@ Each profile chooses at creation how its reads are confirmed, and the choice is 
 | Confirmation                     | Behavior                                                                    | Enforced by       |
 | -------------------------------- | --------------------------------------------------------------------------- | ----------------- |
 | Touch ID on every read (default) | The Enclave refuses to decrypt without Touch ID, so every read costs a tap. | Secure Enclave    |
-| Confirm every read               | Sequester asks in a dialog, which can waive the next five minutes.          | Sequester         |
+| Confirm every read               | Sequester asks in a dialog, which can waive the chosen window.              | Sequester         |
 | No prompt                        | Reads proceed unattended, for automation that cannot answer a prompt.       | Notification only |
 
-Any profile can also remember a confirmation for a minute or two, so a burst of commands costs one tap instead of one per command. It is off by default, locking the screen closes any open window, and changing the profile closes it too.
+Any profile can also remember a confirmation for a window of up to an hour, so a burst of commands costs one tap instead of one per command. It is off by default, locking the screen closes any open window, and changing the profile closes it too.
 
 Only the first is enforced by hardware. The second is an app-level gate in front of a key the app could use without it, and the third is no gate at all. Every read posts a notification whichever you pick, worded to stand out when nothing was asked, so unattended use stays visible. Creating, updating, or deleting a profile always confirms in the app.
 

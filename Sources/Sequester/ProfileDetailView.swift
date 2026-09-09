@@ -102,7 +102,7 @@ struct ProfileDetailView: View {
         case .everyRead:
             "\(profile.tier.enforcementLabel): the requirement is baked into the Enclave key's access control, so every read costs a tap."
         case .confirmEveryRead:
-            "\(profile.tier.enforcementLabel): Sequester asks in a dialog before decrypting, and the dialog can waive the next few minutes."
+            "\(profile.tier.enforcementLabel): Sequester asks in a dialog before decrypting, and the dialog can waive the chosen window."
         case .noPrompt:
             "\(profile.tier.enforcementLabel): reads proceed without confirmation. Every read still posts a notification."
         }

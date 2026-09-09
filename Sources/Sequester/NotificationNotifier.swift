@@ -8,7 +8,10 @@ import SequesterCore
 ///
 /// Each notification is three lines: what happened, which key, and where.
 /// SF Symbols cannot be drawn inside notification text, so the glyphs are
-/// emoji standing in for the app's touchid/key/mappin icons.
+/// emoji standing in for the app's touchid/key/mappin icons. A glyph is
+/// joined to its text with a no-break space, and an unnamed destination is
+/// shown as an abbreviated fingerprint, so the line fits the banner instead
+/// of breaking after the glyph.
 struct NotificationNotifier: SigningNotifier {
 
     func signed(keyName: String, authRequired: Bool, bindingChain: [BindingHop],
@@ -26,7 +29,7 @@ struct NotificationNotifier: SigningNotifier {
             content.title = "Signed"
         }
         content.subtitle = keyLine(keyName, authRequired: authRequired)
-        content.body = destinationLine(bindingChain) ?? "\u{1F4CD} No destination bound"
+        content.body = destinationLine(bindingChain) ?? "\u{1F4CD}\u{00A0}No destination bound"
         content.userInfo = ["keyName": keyName]
         // A unique id per signature keeps each success visible in the stack.
         post(content, identifier: UUID().uuidString)
@@ -40,15 +43,15 @@ struct NotificationNotifier: SigningNotifier {
         content.title = "Signature refused"
         content.subtitle = keyLine(keyName, authRequired: authRequired)
 
-        let destination = bindingChain.last.map { HostNames.shared.label(for: $0.fingerprint) }
+        let destination = bindingChain.last.map { destinationLabel($0.fingerprint) }
         switch reason {
         case .appBlocked:
-            content.body = "\u{1F6AB} Blocked app: \(requester)"
+            content.body = "\u{1F6AB}\u{00A0}Blocked app: \(requester)"
         case .destinationBlocked:
-            content.body = "\u{1F6AB} Destination blocked: \(destination ?? "unknown")"
+            content.body = "\u{1F6AB}\u{00A0}Destination blocked: \(destination ?? "unknown")"
         case .keyLocked:
-            content.body = destination.map { "\u{1F512} Key locked; \($0) is not a known destination" }
-                ?? "\u{1F512} Key locked; destination not known"
+            content.body = destination.map { "\u{1F512}\u{00A0}Key locked; \($0) is not a known destination" }
+                ?? "\u{1F512}\u{00A0}Key locked; destination not known"
         }
         content.userInfo = ["keyName": keyName]
 
@@ -60,14 +63,21 @@ struct NotificationNotifier: SigningNotifier {
 
     /// Second line: the key, prefixed with a Touch ID or key glyph.
     private func keyLine(_ keyName: String, authRequired: Bool) -> String {
-        "\(authRequired ? "\u{261D}\u{FE0F}" : "\u{1F511}") \(keyName)"
+        "\(authRequired ? "\u{261D}\u{FE0F}" : "\u{1F511}")\u{00A0}\(keyName)"
+    }
+
+    /// The host's name when one is set, otherwise the fingerprint cut down
+    /// to fit one banner line. The full fingerprint is one click away in
+    /// the key's detail view.
+    private func destinationLabel(_ fingerprint: String) -> String {
+        HostNames.shared.name(for: fingerprint) ?? OpenSSH.abbreviatedFingerprint(fingerprint)
     }
 
     /// Third line for a signature: the destination, with a mappin glyph and a
     /// forwarded tag. Nil when the request carried no binding.
     private func destinationLine(_ bindingChain: [BindingHop]) -> String? {
         guard let destination = bindingChain.last else { return nil }
-        var line = "\u{1F4CD} \(HostNames.shared.label(for: destination.fingerprint))"
+        var line = "\u{1F4CD}\u{00A0}\(destinationLabel(destination.fingerprint))"
         if bindingChain.contains(where: { $0.forwarding }) {
             line += " (forwarded)"
         }
