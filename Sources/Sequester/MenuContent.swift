@@ -9,6 +9,7 @@ struct MenuContent: View {
         Button("Settings…", systemImage: "gearshape") {
             Navigator.shared.showSettings()
         }
+        .keyboardShortcut(",", modifiers: .command)
 
         Button("About Sequester", systemImage: "info.circle") {
             openWindow(id: "about")
@@ -20,5 +21,6 @@ struct MenuContent: View {
         Button("Quit Sequester", systemImage: "power") {
             NSApp.terminate(nil)
         }
+        .keyboardShortcut("q", modifiers: .command)
     }
 }
