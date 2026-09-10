@@ -10,12 +10,12 @@ struct MenuContent: View {
             Navigator.shared.showSettings()
         }
 
-        Divider()
-
         Button("About Sequester", systemImage: "info.circle") {
             openWindow(id: "about")
             NSApp.activate(ignoringOtherApps: true)
         }
+
+        Divider()
 
         Button("Quit Sequester", systemImage: "power") {
             NSApp.terminate(nil)
