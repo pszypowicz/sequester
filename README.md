@@ -114,6 +114,16 @@ Host myserver
     IdentitiesOnly yes
 ```
 
+## Claude Code
+
+The repository ships a Claude Code plugin with a skill for working on a Mac where Sequester holds the SSH keys and API tokens. Claude loads secrets profiles through `sequester env exec` and keeps their values out of the session. When an SSH signature or a secrets read waits for your approval and you are away, it makes one attempt and then gives you the exact command to run when you are back.
+
+```
+/plugin install sequester --marketplace pszypowicz/sequester
+```
+
+On Claude Code older than 2.1.275, add the marketplace first with `claude plugin marketplace add pszypowicz/sequester`, then run `claude plugin install sequester@sequester`.
+
 ## Security model
 
 - Private keys live in the Secure Enclave. The app and the agent only ever hold an encrypted key handle that is useless on any other machine, and signing happens inside the Enclave.

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "sequester",
+  "description": "The Claude Code plugin that ships with Sequester.",
+  "owner": {
+    "name": "Przemek Szypowicz"
+  },
+  "plugins": [
+    {
+      "name": "sequester",
+      "source": "./claude-plugin",
+      "description": "Work on a Mac where Sequester holds the SSH keys and API tokens: load secrets profiles into one command's environment without exposing values, and handle SSH and secrets approvals that need the user in person.",
+      "tags": ["sequester", "secure-enclave", "ssh-agent", "secrets", "touch-id", "macos"]
+    }
+  ]
+}
