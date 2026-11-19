@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "sequester",
+  "description": "Work on a Mac where Sequester holds the SSH keys and API tokens: load secrets profiles into one command's environment without exposing values, and handle SSH and secrets approvals that need the user in person.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Przemek Szypowicz"
+  },
+  "homepage": "https://github.com/pszypowicz/sequester",
+  "repository": "https://github.com/pszypowicz/sequester",
+  "license": "MIT",
+  "keywords": ["sequester", "secure-enclave", "ssh-agent", "secrets", "touch-id", "macos"]
+}
